@@ -505,7 +505,7 @@ HTML_CONTENT = """<!DOCTYPE html>
   <!-- TAB 1: INTERACTIVE SYMPTOM DIAGNOSER + SAFE PAIN RELIEF            -->
   <!-- ════════════════════════════════════════════════════════════════════ -->
   <div id="tab-diagnose">
-    <div class="card">
+    <div class="card" id="diag-input-card">
       <div class="card-header">
         <h2>🩺 State Your Symptoms or Medical Problem</h2>
         <span class="badge" style="color: #60a5fa;">Sarvam-105B Clinical Engine</span>
@@ -1013,13 +1013,60 @@ function renderDiagnosis(data) {
     `;
   }
 
+  // Hide the initial input card so only the Continue option remains on top (no separate forms)
+  const initialCard = document.getElementById('diag-input-card');
+  if (initialCard) initialCard.style.display = 'none';
+
   container.innerHTML = `
-    <div class="card">
+    <div class="card" style="border: 1px solid #3b82f6;">
       <div class="card-header" style="flex-wrap:wrap; gap:10px;">
-        <h2>📋 AI नैदानिक ट्राइएज रिपोर्ट (Clinical Assessment)</h2>
-        <button class="btn btn-purple diag-voice-btn" style="padding:6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px;" onclick="toggleDiagAudio()">
-          <span class="diag-voice-icon">🔊</span> <span class="diag-voice-label">Listen Doctor Audio (Bulbul v3)</span>
-        </button>
+        <h2>🩺 Live Consultation with Dr. AI (नैदानिक परामर्श)</h2>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="badge active">● Consultation Active</span>
+          <button class="btn btn-secondary" style="padding:5px 12px; font-size:12px; display:inline-flex; align-items:center; gap:5px;" onclick="resetDiagConsultation()">
+            🔄 New Consultation
+          </button>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════════════════════════════ -->
+      <!-- CONTINUE CONVERSATION DIRECTLY ON TOP (VOICE & TEXT)             -->
+      <!-- ════════════════════════════════════════════════════════════════ -->
+      <div style="background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 12px; padding: 14px; margin-bottom: 18px;">
+        <div style="font-size: 13.5px; font-weight: 700; color: #93c5fd; margin-bottom: 8px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+          <span>💬 Continue Conversation with Dr. AI (डॉक्टर से आगे बातचीत करें):</span>
+          <span style="font-size:11.5px; color:#cbd5e1; font-weight:400;">Ask follow-ups, food/diet advice, or medication doubts</span>
+        </div>
+
+        <!-- Quick follow-up question chips -->
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+          <span style="font-size: 11px; color: #94a3b8; align-self: center;">Quick:</span>
+          <button class="chip" onclick="useDiagFollowupPreset('क्या मुझे खाने-पीने में कोई खास परहेज (diet precaution) करना चाहिए?')">🥗 क्या परहेज करें?</button>
+          <button class="chip" onclick="useDiagFollowupPreset('यह समस्या ठीक होने में सामान्यतः कितने दिन लगते हैं?')">⏱️ ठीक होने में कितने दिन लगेंगे?</button>
+          <button class="chip" onclick="useDiagFollowupPreset('क्या मैं इसके साथ कोई अन्य सुरक्षित दर्द निवारक दवाई ले सकता हूँ?')">💊 क्या दूसरी दवाई ले सकते हैं?</button>
+          <button class="chip" onclick="useDiagFollowupPreset('अगर लक्षण न सुधरें तो मुझे कब डॉक्टर के पास जाना चाहिए?')">🏥 डॉक्टर के पास कब जाएं?</button>
+        </div>
+
+        <!-- Voice & Text Input Bar -->
+        <div class="input-bar" style="margin-bottom:0;">
+          <button class="mic-btn" id="diag-chat-mic-btn" onclick="toggleDiagChatMic()" title="Click to speak your follow-up question">
+            <span id="diag-chat-mic-icon">🎙️</span>
+            <span id="diag-chat-mic-text">Speak Question</span>
+          </button>
+          <input type="text" id="diag-chat-input" placeholder="Ask Dr. AI any follow-up question (उदा: क्या मैं दूध या फल ले सकता हूँ?)..." onkeydown="if(event.key==='Enter') sendDiagChatTurn()">
+          <button class="btn btn-purple" id="diag-chat-send-btn" onclick="sendDiagChatTurn()">Send</button>
+        </div>
+      </div>
+
+      <!-- Live Consultation Chat Stream -->
+      <div class="call-window" id="diag-chat-window" style="min-height:140px; max-height:360px; margin-bottom:18px; background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:14px;">
+        <div class="chat-bubble chat-agent">
+          <div class="bubble-speaker">
+            <span>🩺 Dr. AI (Sarvam-105B)</span>
+            ${data.audio_base64 ? `<button class="play-turn-btn" onclick="toggleBubbleAudio(this, '${data.audio_base64}')">🔊 Listen</button>` : ''}
+          </div>
+          <div>${initialSummaryText}</div>
+        </div>
       </div>
 
       <!-- Diagnosis Audio Player Bar (Play / Pause / Resume / Stop) -->
@@ -1033,7 +1080,7 @@ function renderDiagnosis(data) {
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <button class="btn btn-purple diag-voice-btn" style="padding: 7px 16px; font-size: 12px; display:inline-flex; align-items:center; gap:6px;" onclick="toggleDiagAudio()">
-            <span class="diag-voice-icon">▶️</span> <span class="diag-voice-label">Listen Doctor Audio</span>
+            <span class="diag-voice-icon">🔊</span> <span class="diag-voice-label">Listen Doctor Audio (Bulbul v3)</span>
           </button>
           <button class="btn btn-secondary" id="diag-audio-stop-btn" style="padding: 7px 12px; font-size: 12px; display:none;" onclick="stopDiagAudio()">
             ⏹️ Stop
@@ -1058,51 +1105,6 @@ function renderDiagnosis(data) {
       </div>
 
       ${redFlagsHtml}
-
-      <!-- ════════════════════════════════════════════════════════════════ -->
-      <!-- INTERACTIVE FOLLOW-UP CONSULTATION (CONVERSATION WITH DR. AI)     -->
-      <!-- ════════════════════════════════════════════════════════════════ -->
-      <div style="margin-top:24px; padding-top:20px; border-top:1px solid rgba(255,255,255,0.12);">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-          <h3 style="font-size:16px; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px;">
-            💬 Continue Conversation with Dr. AI (डॉक्टर से आगे बातचीत करें)
-          </h3>
-          <span class="badge active">● Live Doctor Consultation</span>
-        </div>
-        <p style="font-size:12.5px; color:#94a3b8; margin-bottom:12px;">
-          Have more questions about your diagnosis, medicines, diet, or recovery? Ask Dr. AI below via <strong>voice or text</strong> just like an in-person doctor consultation!
-        </p>
-
-        <!-- Consultation Chat Stream -->
-        <div class="call-window" id="diag-chat-window" style="min-height:160px; max-height:360px; margin-bottom:14px; background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:14px;">
-          <div class="chat-bubble chat-agent">
-            <div class="bubble-speaker">
-              <span>🩺 Dr. AI (Sarvam-105B)</span>
-              ${data.audio_base64 ? `<button class="play-turn-btn" onclick="toggleBubbleAudio(this, '${data.audio_base64}')">🔊 Listen</button>` : ''}
-            </div>
-            <div>${initialSummaryText}</div>
-          </div>
-        </div>
-
-        <!-- Quick Follow-up Question Chips -->
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-          <span style="font-size:11px; color:#64748b; align-self:center;">Quick Questions:</span>
-          <button class="chip" onclick="useDiagFollowupPreset('क्या मुझे खाने-पीने में कोई खास परहेज (diet precaution) करना चाहिए?')">🥗 क्या परहेज करें?</button>
-          <button class="chip" onclick="useDiagFollowupPreset('यह समस्या ठीक होने में सामान्यतः कितने दिन लगते हैं?')">⏱️ ठीक होने में कितने दिन लगेंगे?</button>
-          <button class="chip" onclick="useDiagFollowupPreset('क्या मैं इसके साथ कोई अन्य सुरक्षित दर्द निवारक दवाई ले सकता हूँ?')">💊 क्या कोई दूसरी दवाई ले सकते हैं?</button>
-          <button class="chip" onclick="useDiagFollowupPreset('अगर लक्षण न सुधरें तो मुझे डॉक्टर या अस्पताल कब जाना चाहिए?')">🏥 डॉक्टर के पास कब जाएं?</button>
-        </div>
-
-        <!-- Voice & Text Input Bar -->
-        <div class="input-bar" style="margin-bottom:0;">
-          <button class="mic-btn" id="diag-chat-mic-btn" onclick="toggleDiagChatMic()" title="Click to speak your follow-up question">
-            <span id="diag-chat-mic-icon">🎙️</span>
-            <span id="diag-chat-mic-text">Speak Question</span>
-          </button>
-          <input type="text" id="diag-chat-input" placeholder="Ask Dr. AI any follow-up question (उदा: क्या मैं दूध या फल ले सकता हूँ?)..." onkeydown="if(event.key==='Enter') sendDiagChatTurn()">
-          <button class="btn btn-purple" id="diag-chat-send-btn" onclick="sendDiagChatTurn()">Send</button>
-        </div>
-      </div>
 
       <div style="margin-top:16px; font-size:11.5px; color:#64748b; font-style:italic;">
         ⚕️ अस्वीकरण: यह एक AI ट्राइएज मूल्यांकन है। यह किसी योग्य चिकित्सक के प्रत्यक्ष नैदानिक परीक्षण का विकल्प नहीं है। गंभीर स्थिति में तुरंत नजदीकी अस्पताल के आपातकालीन विभाग में जाएं।
@@ -1256,6 +1258,19 @@ function stopDiagAudio() {
     diagAudioInstance = null;
   }
   updateDiagButtons('ready');
+}
+
+function resetDiagConsultation() {
+  stopDiagAudio();
+  if (typeof stopAllActiveAudio === 'function') stopAllActiveAudio();
+  document.getElementById('diag-result-container').style.display = 'none';
+  const inputCard = document.getElementById('diag-input-card');
+  if (inputCard) inputCard.style.display = 'block';
+  const inp = document.getElementById('diag-input');
+  if (inp) {
+    inp.value = '';
+    inp.focus();
+  }
 }
 
 // ── FOLLOW-UP CONSULTATION INTERACTIVE CHAT LOGIC ─────────────────────────
