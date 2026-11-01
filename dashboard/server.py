@@ -928,66 +928,82 @@ async function runDiagnosis() {
   }
 }
 
+// ── TAB 1: DIAGNOSIS RESULT & AUDIO CONTROLLER ────────────────────────────
+let diagAudioInstance = null;
+let currentDiagAudioB64 = null;
+let currentDiagSpokenText = "";
+
 function renderDiagnosis(data) {
   const container = document.getElementById('diag-result-container');
   container.style.display = 'block';
 
+  currentDiagAudioB64 = data.audio_base64 || null;
+  currentDiagSpokenText = data.spoken_explanation || data.patient_summary || '';
+
   let triageClass = 'routine';
-  let triageLabel = 'ROUTINE (सामान्य)';
+  let triageLabel = data.triage_label_hi || 'ROUTINE (सामान्य परामर्श)';
   if (data.triage_level === 'EMERGENCY') {
     triageClass = 'emergency';
-    triageLabel = '🚨 EMERGENCY (तत्काल आपातकालीन चिकित्सा आवश्यक)';
+    triageLabel = data.triage_label_hi || '🚨 EMERGENCY (तत्काल आपातकालीन चिकित्सा आवश्यक)';
   } else if (data.triage_level === 'URGENT') {
     triageClass = 'urgent';
-    triageLabel = '⚠️ URGENT (24-48 घंटे में डॉक्टर को दिखाएं)';
+    triageLabel = data.triage_label_hi || '⚠️ URGENT (24-48 घंटे में डॉक्टर को दिखाएं)';
   }
 
+  const causesList = data.differential_diagnoses || data.likely_causes || [];
   let causesHtml = '';
-  (data.likely_causes || []).forEach(c => {
+  causesList.forEach(c => {
     causesHtml += `
       <div style="background:rgba(0,0,0,0.25); padding:10px 14px; border-radius:8px; margin-bottom:8px;">
-        <div style="font-weight:700; color:#93c5fd;">${c.condition} <span class="badge" style="font-size:10px;">संभावना: ${c.likelihood}</span></div>
-        <div style="font-size:12.5px; color:#cbd5e1; margin-top:3px;">${c.clinical_reasoning}</div>
+        <div style="font-weight:700; color:#93c5fd;">${c.condition} <span class="badge" style="font-size:10px;">संभावना: ${c.likelihood || 'संभावित'}</span></div>
+        <div style="font-size:12.5px; color:#cbd5e1; margin-top:3px;">${c.clinical_reasoning || ''}</div>
       </div>
     `;
   });
 
   let reliefHtml = '';
-  const pain = data.pain_relief || {};
-  if (pain.recommended_medicines && pain.recommended_medicines.length > 0) {
-    reliefHtml += `<h3 style="font-size:15px; color:#34d399; margin-top:6px;">💊 अनुशंसित सुरक्षित दवाइयाँ (Safe Minimal-Side-Effect Medications):</h3>`;
-    pain.recommended_medicines.forEach(m => {
+  const safeRelief = data.safe_pain_relief || [];
+  if (Array.isArray(safeRelief) && safeRelief.length > 0) {
+    reliefHtml += `<h3 style="font-size:15px; color:#34d399; margin-top:6px;">💊 अनुशंसित सुरक्षित दर्द निवारण व देखभाल (Safe Pain Relief Guidance):</h3>`;
+    safeRelief.forEach(m => {
       reliefHtml += `
-        <div class="medicine-card">
-          <div class="med-header">
-            <span>${m.name}</span>
-            <span class="badge" style="color:#34d399;">${m.risk_level || 'Safe'}</span>
+        <div class="medicine-card" style="background:rgba(16,185,129,0.08); border-left:3px solid #34d399; padding:10px 14px; border-radius:8px; margin-bottom:8px;">
+          <div class="med-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-weight:700; color:#6ee7b7;">${m.medicine_or_remedy || m.name}</span>
+            <span class="badge" style="color:#34d399;">${m.purpose || 'प्राथमिक राहत'}</span>
           </div>
-          <div class="med-dose"><strong>खुराक:</strong> ${m.dosage}</div>
-          <div class="med-note"><strong>निर्देश:</strong> ${m.how_to_take} | <strong>सुरक्षा टिप:</strong> ${m.safety_notes}</div>
+          <div style="font-size:12.5px; color:#e2e8f0; margin-top:4px;"><strong>निर्देश व खुराक:</strong> ${m.dosage_and_instructions || m.dosage || 'आवश्यकतानुसार सुरक्षित मात्रा में लें'}</div>
+          ${m.safety_caution ? `<div style="font-size:11.5px; color:#fca5a5; margin-top:2px;">⚠️ <strong>सावधानी:</strong> ${m.safety_caution}</div>` : ''}
         </div>
       `;
     });
+  } else if (data.pain_relief) {
+    const pain = data.pain_relief;
+    if (pain.recommended_medicines && pain.recommended_medicines.length > 0) {
+      reliefHtml += `<h3 style="font-size:15px; color:#34d399; margin-top:6px;">💊 अनुशंसित सुरक्षित दवाइयाँ (Safe Minimal-Side-Effect Medications):</h3>`;
+      pain.recommended_medicines.forEach(m => {
+        reliefHtml += `
+          <div class="medicine-card" style="background:rgba(16,185,129,0.08); border-left:3px solid #34d399; padding:10px 14px; border-radius:8px; margin-bottom:8px;">
+            <div class="med-header" style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-weight:700; color:#6ee7b7;">${m.name}</span>
+              <span class="badge" style="color:#34d399;">${m.risk_level || 'Safe'}</span>
+            </div>
+            <div style="font-size:12.5px; color:#e2e8f0; margin-top:4px;"><strong>खुराक:</strong> ${m.dosage}</div>
+            <div style="font-size:12px; color:#cbd5e1; margin-top:2px;"><strong>निर्देश:</strong> ${m.how_to_take} | <strong>सुरक्षा टिप:</strong> ${m.safety_notes}</div>
+          </div>
+        `;
+      });
+    }
   }
 
-  if (pain.home_remedies && pain.home_remedies.length > 0) {
-    reliefHtml += `
-      <div style="margin-top:14px; background:rgba(255,255,255,0.03); padding:12px; border-radius:8px;">
-        <strong style="color:#6ee7b7; font-size:13px;">🌿 सुरक्षित घरेलू देखभाल:</strong>
-        <ul style="padding-left:20px; font-size:12.5px; color:#cbd5e1; margin-top:4px;">
-          ${pain.home_remedies.map(r => `<li>${r}</li>`).join('')}
-        </ul>
-      </div>
-    `;
-  }
-
+  const redFlagsList = data.red_flag_symptoms || data.red_flag_warnings || [];
   let redFlagsHtml = '';
-  if (data.red_flag_warnings && data.red_flag_warnings.length > 0) {
+  if (redFlagsList.length > 0) {
     redFlagsHtml = `
       <div style="background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.4); border-radius:10px; padding:12px 16px; margin-top:14px;">
-        <strong style="color:#fca5a5; font-size:13px;">🚩 खतरे के संकेत (तुरंत डॉक्टर को दिखाएं):</strong>
+        <strong style="color:#fca5a5; font-size:13px;">🚩 खतरे के संकेत (तुरंत डॉक्टर या आपातकालीन कक्ष में दिखाएं):</strong>
         <ul style="padding-left:20px; font-size:12.5px; color:#fecaca; margin-top:4px;">
-          ${data.red_flag_warnings.map(f => `<li>${f}</li>`).join('')}
+          ${redFlagsList.map(f => `<li>${f}</li>`).join('')}
         </ul>
       </div>
     `;
@@ -995,9 +1011,30 @@ function renderDiagnosis(data) {
 
   container.innerHTML = `
     <div class="card">
-      <div class="card-header">
+      <div class="card-header" style="flex-wrap:wrap; gap:10px;">
         <h2>📋 AI नैदानिक ट्राइएज रिपोर्ट (Clinical Assessment)</h2>
-        ${data.audio_base64 ? `<button class="btn btn-purple" style="padding:6px 14px; font-size:12px;" onclick="playAudioBase64('${data.audio_base64}')">🔊 Listen Doctor Audio (Bulbul v3)</button>` : ''}
+        <button class="btn btn-purple diag-voice-btn" style="padding:6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px;" onclick="toggleDiagAudio()">
+          <span class="diag-voice-icon">🔊</span> <span class="diag-voice-label">Listen Doctor Audio (Bulbul v3)</span>
+        </button>
+      </div>
+
+      <!-- Diagnosis Audio Player Bar (Play / Pause / Resume / Stop) -->
+      <div id="diag-audio-bar" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.35); padding: 12px 16px; border-radius: 10px; margin-bottom: 16px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:22px;">🎧</span>
+          <div>
+            <div style="font-weight:700; font-size:14px; color:#fff;">Spoken Doctor Diagnosis (Sarvam Bulbul v3)</div>
+            <div style="font-size:12px; color:#93c5fd;" id="diag-audio-status">Click "Listen Doctor Audio" to hear spoken medical advice</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn btn-purple diag-voice-btn" style="padding: 7px 16px; font-size: 12px; display:inline-flex; align-items:center; gap:6px;" onclick="toggleDiagAudio()">
+            <span class="diag-voice-icon">▶️</span> <span class="diag-voice-label">Listen Doctor Audio</span>
+          </button>
+          <button class="btn btn-secondary" id="diag-audio-stop-btn" style="padding: 7px 12px; font-size: 12px; display:none;" onclick="stopDiagAudio()">
+            ⏹️ Stop
+          </button>
+        </div>
       </div>
 
       <div class="triage-card ${triageClass}">
@@ -1024,9 +1061,139 @@ function renderDiagnosis(data) {
     </div>
   `;
 
-  if (data.audio_base64) {
-    playAudioBase64(data.audio_base64);
+  container.scrollIntoView({ behavior: 'smooth' });
+
+  // DO NOT autoplay audio! Show the analyzed output first and let the user click to play
+  stopDiagAudio();
+  updateDiagButtons('ready');
+}
+
+function updateDiagButtons(state) {
+  const btns = document.querySelectorAll('.diag-voice-btn');
+  const stopBtn = document.getElementById('diag-audio-stop-btn');
+  const statusEl = document.getElementById('diag-audio-status');
+
+  btns.forEach(btn => {
+    const icon = btn.querySelector('.diag-voice-icon');
+    const label = btn.querySelector('.diag-voice-label');
+
+    if (state === 'playing') {
+      if (icon) icon.innerText = '⏸️';
+      if (label) label.innerText = 'Pause Doctor Audio';
+      btn.classList.remove('btn-secondary');
+      btn.classList.add('btn-purple');
+    } else if (state === 'paused') {
+      if (icon) icon.innerText = '▶️';
+      if (label) label.innerText = 'Resume Doctor Audio';
+      btn.classList.add('btn-secondary');
+      btn.classList.remove('btn-purple');
+    } else { // stopped / ready
+      if (icon) icon.innerText = '🔊';
+      if (label) label.innerText = 'Listen Doctor Audio (Bulbul v3)';
+      btn.classList.remove('btn-secondary');
+      btn.classList.add('btn-purple');
+    }
+  });
+
+  if (state === 'playing') {
+    if (stopBtn) stopBtn.style.display = 'inline-flex';
+    if (statusEl) statusEl.innerText = '🔊 Playing AI doctor diagnosis advice (Bulbul v3)...';
+  } else if (state === 'paused') {
+    if (stopBtn) stopBtn.style.display = 'inline-flex';
+    if (statusEl) statusEl.innerText = 'Audio paused. Click Resume to continue listening.';
+  } else {
+    if (stopBtn) stopBtn.style.display = 'none';
+    if (statusEl) statusEl.innerText = 'Click "Listen Doctor Audio" to hear spoken medical advice.';
   }
+}
+
+function toggleDiagAudio() {
+  // If audio is already active -> toggle pause / play
+  if (diagAudioInstance) {
+    if (!diagAudioInstance.paused) {
+      diagAudioInstance.pause();
+      updateDiagButtons('paused');
+      return;
+    } else {
+      if (typeof stopAllActiveAudio === 'function') stopAllActiveAudio();
+      diagAudioInstance.play();
+      updateDiagButtons('playing');
+      return;
+    }
+  }
+
+  // Audio not yet started
+  if (currentDiagAudioB64) {
+    startDiagAudioPlayback(currentDiagAudioB64);
+    return;
+  }
+
+  // If audio wasn't pre-rendered, synthesize on demand
+  if (currentDiagSpokenText) {
+    const profile = getStoredProfile();
+    const lang = profile.language || 'Hindi';
+    const statusEl = document.getElementById('diag-audio-status');
+    if (statusEl) statusEl.innerText = 'Synthesizing voice via Sarvam Bulbul v3...';
+
+    fetch('/api/speak-reminder', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ text: currentDiagSpokenText, language: lang })
+    })
+    .then(r => r.json())
+    .then(resData => {
+      if (resData.audio_base64) {
+        currentDiagAudioB64 = resData.audio_base64;
+        startDiagAudioPlayback(resData.audio_base64);
+      } else {
+        alert("Could not generate audio diagnosis.");
+      }
+    })
+    .catch(err => {
+      alert("Audio error: " + err.message);
+    });
+  }
+}
+
+function startDiagAudioPlayback(b64) {
+  if (typeof stopAllActiveAudio === 'function') stopAllActiveAudio();
+  if (diagAudioInstance) {
+    diagAudioInstance.pause();
+    diagAudioInstance = null;
+  }
+
+  const audio = new Audio("data:audio/wav;base64," + b64);
+  diagAudioInstance = audio;
+
+  audio.onplay = () => {
+    updateDiagButtons('playing');
+  };
+
+  audio.onpause = () => {
+    if (!audio.ended) {
+      updateDiagButtons('paused');
+    }
+  };
+
+  audio.onended = () => {
+    stopDiagAudio();
+    const statusEl = document.getElementById('diag-audio-status');
+    if (statusEl) statusEl.innerText = 'Playback finished. Click Listen Doctor Audio to replay.';
+  };
+
+  audio.play().catch(e => {
+    console.log("Audio autoplay or gesture needed:", e);
+    updateDiagButtons('ready');
+  });
+}
+
+function stopDiagAudio() {
+  if (diagAudioInstance) {
+    diagAudioInstance.pause();
+    diagAudioInstance.currentTime = 0;
+    diagAudioInstance = null;
+  }
+  updateDiagButtons('ready');
 }
 
 // ── TAB 2: PRESCRIPTION UPLOAD & DYNAMIC TIMETABLE ──────────────────────────
@@ -1185,6 +1352,24 @@ let allTimetableAudio = null;
 let currentTimetableData = null;
 
 function stopAllActiveAudio() {
+  if (diagAudioInstance) {
+    diagAudioInstance.pause();
+    diagAudioInstance.currentTime = 0;
+    diagAudioInstance = null;
+    const dBtn = document.getElementById('diag-audio-btn');
+    const dStop = document.getElementById('diag-audio-stop-btn');
+    const dStatus = document.getElementById('diag-audio-status');
+    const dIcon = document.getElementById('diag-btn-icon');
+    const dText = document.getElementById('diag-btn-text');
+    if (dIcon) dIcon.innerText = '▶️';
+    if (dText) dText.innerText = 'Play Diagnosis Audio';
+    if (dBtn) {
+      dBtn.classList.remove('btn-secondary');
+      dBtn.classList.add('btn-purple');
+    }
+    if (dStop) dStop.style.display = 'none';
+    if (dStatus) dStatus.innerText = 'Click to listen to empathetic audio explanation of your diagnosis';
+  }
   if (activeSlotAudio) {
     activeSlotAudio.pause();
     activeSlotAudio.currentTime = 0;
