@@ -42,7 +42,7 @@ from companion.checkin import generate_agent_reply, evaluate_call_outcome
 from companion.tts import speak_turn
 from companion.stt import transcribe_audio_bytes
 from companion.escalate import create_escalation_alert
-from diagnoser.engine import diagnose_symptoms
+from diagnoser.engine import diagnose_symptoms, diagnose_followup
 from decoder.timetable import parse_prescription_text, process_uploaded_file
 from sarvamai import SarvamAI
 import json_repair
@@ -950,6 +950,10 @@ function renderDiagnosis(data) {
     triageLabel = data.triage_label_hi || '⚠️ URGENT (24-48 घंटे में डॉक्टर को दिखाएं)';
   }
 
+  const initialSummaryText = data.spoken_explanation || data.patient_summary || (
+    `नमस्ते! मैंने आपके लक्षणों का नैदानिक मूल्यांकन कर लिया है। प्राथमिकता स्तर: ${triageLabel}। आप ऊपर दी गई विस्तृत रिपोर्ट देख सकते हैं। क्या आप इस बारे में कोई सवाल पूछना चाहते हैं?`
+  );
+
   const causesList = data.differential_diagnoses || data.likely_causes || [];
   let causesHtml = '';
   causesList.forEach(c => {
@@ -1055,11 +1059,69 @@ function renderDiagnosis(data) {
 
       ${redFlagsHtml}
 
-      <div style="margin-top:14px; font-size:11.5px; color:#64748b; font-style:italic;">
+      <!-- ════════════════════════════════════════════════════════════════ -->
+      <!-- INTERACTIVE FOLLOW-UP CONSULTATION (CONVERSATION WITH DR. AI)     -->
+      <!-- ════════════════════════════════════════════════════════════════ -->
+      <div style="margin-top:24px; padding-top:20px; border-top:1px solid rgba(255,255,255,0.12);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3 style="font-size:16px; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px;">
+            💬 Continue Conversation with Dr. AI (डॉक्टर से आगे बातचीत करें)
+          </h3>
+          <span class="badge active">● Live Doctor Consultation</span>
+        </div>
+        <p style="font-size:12.5px; color:#94a3b8; margin-bottom:12px;">
+          Have more questions about your diagnosis, medicines, diet, or recovery? Ask Dr. AI below via <strong>voice or text</strong> just like an in-person doctor consultation!
+        </p>
+
+        <!-- Consultation Chat Stream -->
+        <div class="call-window" id="diag-chat-window" style="min-height:160px; max-height:360px; margin-bottom:14px; background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:14px;">
+          <div class="chat-bubble chat-agent">
+            <div class="bubble-speaker">
+              <span>🩺 Dr. AI (Sarvam-105B)</span>
+              ${data.audio_base64 ? `<button class="play-turn-btn" onclick="toggleBubbleAudio(this, '${data.audio_base64}')">🔊 Listen</button>` : ''}
+            </div>
+            <div>${initialSummaryText}</div>
+          </div>
+        </div>
+
+        <!-- Quick Follow-up Question Chips -->
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+          <span style="font-size:11px; color:#64748b; align-self:center;">Quick Questions:</span>
+          <button class="chip" onclick="useDiagFollowupPreset('क्या मुझे खाने-पीने में कोई खास परहेज (diet precaution) करना चाहिए?')">🥗 क्या परहेज करें?</button>
+          <button class="chip" onclick="useDiagFollowupPreset('यह समस्या ठीक होने में सामान्यतः कितने दिन लगते हैं?')">⏱️ ठीक होने में कितने दिन लगेंगे?</button>
+          <button class="chip" onclick="useDiagFollowupPreset('क्या मैं इसके साथ कोई अन्य सुरक्षित दर्द निवारक दवाई ले सकता हूँ?')">💊 क्या कोई दूसरी दवाई ले सकते हैं?</button>
+          <button class="chip" onclick="useDiagFollowupPreset('अगर लक्षण न सुधरें तो मुझे डॉक्टर या अस्पताल कब जाना चाहिए?')">🏥 डॉक्टर के पास कब जाएं?</button>
+        </div>
+
+        <!-- Voice & Text Input Bar -->
+        <div class="input-bar" style="margin-bottom:0;">
+          <button class="mic-btn" id="diag-chat-mic-btn" onclick="toggleDiagChatMic()" title="Click to speak your follow-up question">
+            <span id="diag-chat-mic-icon">🎙️</span>
+            <span id="diag-chat-mic-text">Speak Question</span>
+          </button>
+          <input type="text" id="diag-chat-input" placeholder="Ask Dr. AI any follow-up question (उदा: क्या मैं दूध या फल ले सकता हूँ?)..." onkeydown="if(event.key==='Enter') sendDiagChatTurn()">
+          <button class="btn btn-purple" id="diag-chat-send-btn" onclick="sendDiagChatTurn()">Send</button>
+        </div>
+      </div>
+
+      <div style="margin-top:16px; font-size:11.5px; color:#64748b; font-style:italic;">
         ⚕️ अस्वीकरण: यह एक AI ट्राइएज मूल्यांकन है। यह किसी योग्य चिकित्सक के प्रत्यक्ष नैदानिक परीक्षण का विकल्प नहीं है। गंभीर स्थिति में तुरंत नजदीकी अस्पताल के आपातकालीन विभाग में जाएं।
       </div>
     </div>
   `;
+
+  // Initialize interactive consultation session state
+  diagChatHistory = [
+    { role: "assistant", content: initialSummaryText }
+  ];
+  const storedProfile = getStoredProfile();
+  diagPatientContext = {
+    name: storedProfile.name || "Patient",
+    age: storedProfile.age || "",
+    gender: storedProfile.gender || "",
+    initial_diagnosis: data.triage_label_hi || data.triage_level || "Clinical Evaluation",
+    initial_symptoms: document.getElementById('diag-input').value || ""
+  };
 
   container.scrollIntoView({ behavior: 'smooth' });
 
@@ -1194,6 +1256,220 @@ function stopDiagAudio() {
     diagAudioInstance = null;
   }
   updateDiagButtons('ready');
+}
+
+// ── FOLLOW-UP CONSULTATION INTERACTIVE CHAT LOGIC ─────────────────────────
+let diagChatHistory = [];
+let diagPatientContext = {};
+let isDiagChatRecording = false;
+let diagChatMediaRecorder = null;
+let diagChatAudioChunks = [];
+
+let currentBubbleAudio = null;
+let currentBubbleBtn = null;
+
+function toggleBubbleAudio(btn, audioB64) {
+  if (currentBubbleAudio && currentBubbleBtn === btn) {
+    if (!currentBubbleAudio.paused) {
+      currentBubbleAudio.pause();
+      btn.innerText = '▶ Resume';
+      return;
+    } else {
+      if (typeof stopAllActiveAudio === 'function') stopAllActiveAudio();
+      currentBubbleAudio.play();
+      btn.innerText = '⏸ Pause';
+      return;
+    }
+  }
+
+  // Stop other audio first
+  if (typeof stopAllActiveAudio === 'function') stopAllActiveAudio();
+  if (currentBubbleAudio) {
+    currentBubbleAudio.pause();
+    if (currentBubbleBtn) currentBubbleBtn.innerText = '🔊 Listen';
+    currentBubbleAudio = null;
+    currentBubbleBtn = null;
+  }
+
+  if (!audioB64) return;
+  const audio = new Audio("data:audio/wav;base64," + audioB64);
+  currentBubbleAudio = audio;
+  currentBubbleBtn = btn;
+  btn.innerText = '⏸ Pause';
+
+  audio.onended = () => {
+    btn.innerText = '🔊 Listen';
+    currentBubbleAudio = null;
+    currentBubbleBtn = null;
+  };
+  audio.onpause = () => {
+    if (!audio.ended) btn.innerText = '▶ Resume';
+  };
+  audio.onplay = () => {
+    btn.innerText = '⏸ Pause';
+  };
+
+  audio.play().catch(() => {
+    btn.innerText = '🔊 Listen';
+  });
+}
+
+function appendDiagChatBubble(role, text, audioB64) {
+  const win = document.getElementById('diag-chat-window');
+  if (!win) return;
+  const d = document.createElement('div');
+  d.className = 'chat-bubble ' + (role === 'assistant' ? 'chat-agent' : 'chat-patient');
+
+  let speakerLabel = role === 'assistant' ? '🩺 Dr. AI (Sarvam-105B)' : '👤 You';
+  let playBtnHtml = '';
+  if (audioB64) {
+    playBtnHtml = `<button class="play-turn-btn" onclick="toggleBubbleAudio(this, '${audioB64}')">🔊 Listen</button>`;
+  }
+
+  d.innerHTML = `
+    <div class="bubble-speaker">
+      <span>${speakerLabel}</span>
+      ${playBtnHtml}
+    </div>
+    <div>${text}</div>
+  `;
+  win.appendChild(d);
+  win.scrollTop = win.scrollHeight;
+}
+
+async function sendDiagChatTurn() {
+  const inputEl = document.getElementById('diag-chat-input');
+  const text = inputEl.value.trim();
+  if (!text) return;
+
+  const profile = getStoredProfile();
+  const lang = profile.language || 'Hindi';
+
+  inputEl.value = '';
+  inputEl.disabled = true;
+  document.getElementById('diag-chat-send-btn').disabled = true;
+
+  appendDiagChatBubble('user', text);
+
+  const win = document.getElementById('diag-chat-window');
+  const loading = document.createElement('div');
+  loading.className = 'chat-bubble chat-agent';
+  loading.id = 'diag-chat-loading';
+  loading.innerHTML = '<div style="color:#a5b4fc; font-style:italic;">🩺 Dr. AI is evaluating your question with Sarvam-105B...</div>';
+  win.appendChild(loading);
+  win.scrollTop = win.scrollHeight;
+
+  try {
+    const res = await fetch('/api/diagnose-followup', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        user_text: text,
+        history: diagChatHistory,
+        patient_context: diagPatientContext,
+        language: lang
+      })
+    });
+    const data = await res.json();
+    const loadEl = document.getElementById('diag-chat-loading');
+    if (loadEl) loadEl.remove();
+
+    if (data.history) diagChatHistory = data.history;
+    appendDiagChatBubble('assistant', data.reply, data.audio_base64);
+  } catch (err) {
+    const loadEl = document.getElementById('diag-chat-loading');
+    if (loadEl) loadEl.remove();
+    appendDiagChatBubble('assistant', "माफ़ कीजिए, परामर्श में समस्या आई: " + err.message);
+  } finally {
+    inputEl.disabled = false;
+    document.getElementById('diag-chat-send-btn').disabled = false;
+    inputEl.focus();
+  }
+}
+
+function useDiagFollowupPreset(text) {
+  const inputEl = document.getElementById('diag-chat-input');
+  if (inputEl) {
+    inputEl.value = text;
+    sendDiagChatTurn();
+  }
+}
+
+async function toggleDiagChatMic() {
+  const profile = getStoredProfile();
+  const lang = profile.language || 'Hindi';
+  const btn = document.getElementById('diag-chat-mic-btn');
+  const txt = document.getElementById('diag-chat-mic-text');
+
+  if (!isDiagChatRecording) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      diagChatAudioChunks = [];
+      diagChatMediaRecorder = new MediaRecorder(stream);
+      diagChatMediaRecorder.ondataavailable = e => { if (e.data.size > 0) diagChatAudioChunks.push(e.data); };
+      diagChatMediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(diagChatAudioChunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          const b64 = reader.result.split(',')[1];
+          txt.innerText = 'Transcribing voice via Saaras v4...';
+          btn.disabled = true;
+
+          const win = document.getElementById('diag-chat-window');
+          const loading = document.createElement('div');
+          loading.className = 'chat-bubble chat-agent';
+          loading.id = 'diag-chat-loading';
+          loading.innerHTML = '<div style="color:#a5b4fc; font-style:italic;">🩺 Transcribing via Saaras v4 and consulting Dr. AI...</div>';
+          win.appendChild(loading);
+          win.scrollTop = win.scrollHeight;
+
+          try {
+            const res = await fetch('/api/diagnose-followup-voice', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                audio_base64: b64,
+                history: diagChatHistory,
+                patient_context: diagPatientContext,
+                language: lang
+              })
+            });
+            const data = await res.json();
+            const loadEl = document.getElementById('diag-chat-loading');
+            if (loadEl) loadEl.remove();
+
+            if (data.user_transcript) {
+              appendDiagChatBubble('user', data.user_transcript);
+            }
+            if (data.history) diagChatHistory = data.history;
+            appendDiagChatBubble('assistant', data.reply, data.audio_base64);
+          } catch (err) {
+            const loadEl = document.getElementById('diag-chat-loading');
+            if (loadEl) loadEl.remove();
+            appendDiagChatBubble('assistant', "वॉइस परामर्श में समस्या आई: " + err.message);
+          } finally {
+            btn.disabled = false;
+            btn.classList.remove('recording');
+            txt.innerText = 'Speak Question';
+          }
+        };
+      };
+
+      diagChatMediaRecorder.start();
+      isDiagChatRecording = true;
+      btn.classList.add('recording');
+      txt.innerText = 'Recording... Click to Stop';
+    } catch (err) {
+      alert("Microphone access error: " + err.message);
+    }
+  } else {
+    diagChatMediaRecorder.stop();
+    isDiagChatRecording = false;
+    btn.classList.remove('recording');
+    txt.innerText = 'Processing...';
+  }
 }
 
 // ── TAB 2: PRESCRIPTION UPLOAD & DYNAMIC TIMETABLE ──────────────────────────
@@ -1391,6 +1667,13 @@ function stopAllActiveAudio() {
     if (stopBtn) stopBtn.style.display = 'none';
     if (statusText) statusText.innerText = 'Click to listen to complete daily schedule in your selected language';
     allTimetableAudio = null;
+  }
+  if (currentBubbleAudio) {
+    currentBubbleAudio.pause();
+    currentBubbleAudio.currentTime = 0;
+    if (currentBubbleBtn) currentBubbleBtn.innerText = '🔊 Listen';
+    currentBubbleAudio = null;
+    currentBubbleBtn = null;
   }
 }
 
@@ -1811,6 +2094,45 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "user_transcript": user_transcript,
                 "assessment": assessment
             })
+            return
+
+        # ── ENDPOINT: DIAGNOSE FOLLOW-UP CONSULTATION CHAT (TEXT) ───────────
+        if self.path == "/api/diagnose-followup":
+            user_text = req_data.get("user_text", "")
+            history = req_data.get("history", [])
+            patient_context = req_data.get("patient_context", {})
+            lang = req_data.get("language", "Hindi")
+
+            print(f"[diagnoser-chat] Follow-up question: '{user_text}'")
+            res = diagnose_followup(
+                history=history,
+                user_message=user_text,
+                patient_context=patient_context,
+                language=lang
+            )
+            self._send_json(res)
+            return
+
+        # ── ENDPOINT: DIAGNOSE FOLLOW-UP CONSULTATION CHAT (VOICE) ──────────
+        if self.path == "/api/diagnose-followup-voice":
+            audio_b64 = req_data.get("audio_base64", "")
+            history = req_data.get("history", [])
+            patient_context = req_data.get("patient_context", {})
+            lang = req_data.get("language", "Hindi")
+            raw_audio = base64.b64decode(audio_b64)
+
+            print(f"[diagnoser-chat] Transcribing follow-up voice ({len(raw_audio)} bytes)...")
+            user_transcript = transcribe_audio_bytes(raw_audio, language=lang)
+            print(f"[diagnoser-chat] Transcribed follow-up: '{user_transcript}'")
+
+            res = diagnose_followup(
+                history=history,
+                user_message=user_transcript,
+                patient_context=patient_context,
+                language=lang
+            )
+            res["user_transcript"] = user_transcript
+            self._send_json(res)
             return
 
         # ── ENDPOINT: SPEAK REMINDER (BULBUL V3) ────────────────────────────

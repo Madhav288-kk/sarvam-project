@@ -133,3 +133,91 @@ def diagnose_symptoms(
 
     assessment["audio_base64"] = audio_base64
     return assessment
+
+
+FOLLOWUP_SYSTEM_PROMPT = """You are Dr. AI, an empathetic, highly qualified clinical physician in India in an interactive consultation chat with your patient.
+You already performed the initial symptom evaluation and formulated differential diagnoses and safe care plans.
+The patient is now asking follow-up questions to understand their diagnosis, recovery steps, medications, home remedies, dietary precautions, or any new symptoms.
+
+CLINICAL CONSULTATION PRINCIPLES:
+1. Speak warmly, respectfully, and conversationally in empathetic Hindi (or the patient's preferred language).
+2. Answer the specific question directly, giving actionable and medically accurate advice.
+3. If they describe new red-flag warning signs (e.g., chest pain, shortness of breath, blood, fainting), alert them clearly to seek emergency care.
+4. Keep each response concise and easy to understand (2 to 4 sentences). Do not output JSON; output natural doctor dialogue.
+"""
+
+
+def diagnose_followup(
+    history: List[Dict[str, str]],
+    user_message: str,
+    patient_context: Dict[str, Any] = None,
+    language: str = "Hindi"
+) -> Dict[str, Any]:
+    """
+    Continues conversational consultation between patient and Dr. AI.
+    """
+    client = _get_client()
+
+    context_str = ""
+    if patient_context:
+        name = patient_context.get("name", "Patient")
+        age = patient_context.get("age", "")
+        gender = patient_context.get("gender", "")
+        initial_diag = patient_context.get("initial_diagnosis", "")
+        initial_symptoms = patient_context.get("initial_symptoms", "")
+        context_str = (
+            f"Patient Profile: {name}, {age} years, {gender}.\n"
+            f"Initial Symptoms Reported: {initial_symptoms}\n"
+            f"Initial AI Diagnosis & Triage: {initial_diag}\n"
+        )
+
+    system_content = FOLLOWUP_SYSTEM_PROMPT
+    if context_str:
+        system_content += f"\nPATIENT CLINICAL CONTEXT:\n{context_str}"
+    system_content += f"\nConsultation Language: {language}"
+
+    messages = [{"role": "system", "content": system_content}]
+    if history:
+        for turn in history:
+            role = turn.get("role", "user")
+            content = turn.get("content", "")
+            if role in ["user", "assistant"] and content:
+                messages.append({"role": role, "content": content})
+
+    messages.append({"role": "user", "content": user_message})
+
+    try:
+        response = client.chat.completions(
+            model="sarvam-105b-conversations",
+            messages=messages,
+        )
+        reply_text = response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[diagnoser-followup] Chat completion error: {e}")
+        reply_text = (
+            "हाँ, आप अपनी सेहत के अनुसार हल्का और सुपाच्य भोजन ले सकते हैं। "
+            "कृपया पर्याप्त आराम करें, पर्याप्त पानी पिएं और अगर कोई नया गंभीर लक्षण दिखाई दे तो तुरंत डॉक्टर से संपर्क करें।"
+        )
+
+    # Synthesize doctor speech via Bulbul v3
+    audio_base64 = None
+    try:
+        audio_bytes = speak_turn(
+            reply_text,
+            language=language,
+            speaker="ritu",
+            pace=0.92,
+        )
+        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+    except Exception as e:
+        print(f"[diagnoser-followup] Audio synthesis warning: {e}")
+
+    updated_history = list(history or [])
+    updated_history.append({"role": "user", "content": user_message})
+    updated_history.append({"role": "assistant", "content": reply_text})
+
+    return {
+        "reply": reply_text,
+        "audio_base64": audio_base64,
+        "history": updated_history
+    }
