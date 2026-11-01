@@ -122,8 +122,8 @@ HTML_CONTENT = """<!DOCTYPE html>
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 24px;
-      padding-bottom: 20px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
       border-bottom: 1px solid var(--border);
     }
     .header-left h1 {
@@ -137,6 +137,52 @@ HTML_CONTENT = """<!DOCTYPE html>
       gap: 10px;
     }
     .header-left p { color: var(--text-muted); font-size: 13.5px; margin-top: 4px; }
+
+    /* Patient Intake Card */
+    .patient-intake-card {
+      background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+      border: 1px solid #4338ca;
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin-bottom: 22px;
+      box-shadow: 0 4px 16px rgba(67, 56, 202, 0.15);
+    }
+    .intake-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .intake-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1.2fr 1.5fr;
+      gap: 12px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 5px;
+    }
+    .form-input {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #fff;
+      font-family: var(--font);
+      font-size: 13.5px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-input:focus {
+      border-color: #818cf8;
+      box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
+    }
 
     /* 3-Way Tabs */
     .tabs-bar {
@@ -343,20 +389,6 @@ HTML_CONTENT = """<!DOCTYPE html>
       transition: background 0.2s;
     }
 
-    /* Profile Ribbon */
-    .profile-banner {
-      background: linear-gradient(90deg, #1e1b4b 0%, #0f172a 100%);
-      border: 1px solid #4338ca;
-      border-radius: 12px;
-      padding: 14px 20px;
-      margin-bottom: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 14px;
-    }
-
     /* Upload Box */
     .drop-zone {
       border: 2px dashed #7c3aed;
@@ -391,6 +423,7 @@ HTML_CONTENT = """<!DOCTYPE html>
       body { padding: 12px; }
       .main-grid { grid-template-columns: 1fr; }
       .tabs-bar { flex-direction: column; }
+      .intake-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -402,19 +435,58 @@ HTML_CONTENT = """<!DOCTYPE html>
       <h1>🩺 Sarvam AI Healthcare Platform</h1>
       <p>AI Clinical Diagnoser • Prescription Digitizer & Reminders • Sovereign Multilingual</p>
     </div>
-    <div>
-      <select id="lang-select" style="background:#1f2937; color:#fff; border:1px solid #374151; padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;" onchange="onLanguageChange()">
-        <option value="Hindi" selected>🇮🇳 Hindi (हिन्दी)</option>
-        <option value="Telugu">🇮🇳 Telugu (తెలుగు)</option>
-        <option value="Tamil">🇮🇳 Tamil (தமிழ்)</option>
-        <option value="Bengali">🇮🇳 Bengali (বাংলা)</option>
-        <option value="Marathi">🇮🇳 Marathi (मराठी)</option>
-        <option value="Gujarati">🇮🇳 Gujarati (ગુજરાતી)</option>
-        <option value="Kannada">🇮🇳 Kannada (ಕನ್ನಡ)</option>
-        <option value="English">🌐 English</option>
-      </select>
-    </div>
   </header>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- MANDATORY PATIENT INTAKE FORM (DEVICE-SPECIFIC & USER INTERACTIVE)   -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="patient-intake-card">
+    <div class="intake-header">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:22px;">👤</span>
+        <div>
+          <h3 style="font-size:15px; font-weight:700; color:#fff;">Patient Details (Required for Clinical Evaluation & Timetables)</h3>
+          <p style="font-size:12px; color:#a5b4fc;">Please enter your details below. Each visitor's profile and timetable are personalized on their own device.</p>
+        </div>
+      </div>
+      <span class="badge" id="profile-status-badge" style="background:rgba(245,158,11,0.2); color:#fbbf24; border-color:rgba(245,158,11,0.3);">
+        ⚠️ Please Enter Your Details
+      </span>
+    </div>
+
+    <div class="intake-grid">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input type="text" id="patient-name-input" class="form-input" placeholder="Enter Full Name (e.g. Priya Sharma)" oninput="onProfileInputChanged()">
+      </div>
+      <div class="form-group">
+        <label>Age *</label>
+        <input type="number" id="patient-age-input" class="form-input" placeholder="Age (e.g. 24)" min="1" max="120" oninput="onProfileInputChanged()">
+      </div>
+      <div class="form-group">
+        <label>Gender *</label>
+        <select id="patient-gender-input" class="form-input" onchange="onProfileInputChanged()">
+          <option value="" disabled selected>Select Gender</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Preferred Language</label>
+        <select id="patient-lang-input" class="form-input" onchange="onProfileInputChanged()">
+          <option value="Hindi" selected>🇮🇳 Hindi (हिन्दी)</option>
+          <option value="Telugu">🇮🇳 Telugu (తెలుగు)</option>
+          <option value="Tamil">🇮🇳 Tamil (தமிழ்)</option>
+          <option value="Bengali">🇮🇳 Bengali (বাংলা)</option>
+          <option value="Marathi">🇮🇳 Marathi (मराठी)</option>
+          <option value="Gujarati">🇮🇳 Gujarati (ગુજરાતી)</option>
+          <option value="Kannada">🇮🇳 Kannada (ಕನ್ನಡ)</option>
+          <option value="English">🌐 English</option>
+        </select>
+      </div>
+    </div>
+  </div>
 
   <!-- 3-Way Mode Switcher Tabs -->
   <div class="tabs-bar">
@@ -440,7 +512,7 @@ HTML_CONTENT = """<!DOCTYPE html>
       </div>
 
       <p style="font-size: 13.5px; color: #94a3b8; margin-bottom: 12px;">
-        Tell the AI what you are feeling. It will formulate a <strong>differential diagnosis, triage level, and safe low-risk pain relief guidance</strong> with minimal side effects.
+        Tell the AI what you are feeling. It will formulate a <strong>differential diagnosis, triage level, and safe low-risk pain relief guidance</strong> tailored to your age and gender.
       </p>
 
       <textarea id="diag-input" class="symptom-textarea" placeholder="उदाहरण: मुझे 2 दिन से सिर में तेज दर्द और बुखार है, क्या मैं कोई सुरक्षित दवाई ले सकता हूँ जिससे दर्द में राहत मिले? (Or describe in English)..."></textarea>
@@ -474,27 +546,6 @@ HTML_CONTENT = """<!DOCTYPE html>
   <!-- TAB 2: INTERACTIVE PRESCRIPTION UPLOADER & TIMETABLE                -->
   <!-- ════════════════════════════════════════════════════════════════════ -->
   <div id="tab-prescription" style="display:none;">
-    <!-- Active Patient Profile Ribbon -->
-    <div class="profile-banner">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <span style="font-size:26px;">👤</span>
-        <div>
-          <div style="font-size:11px; color:#a5b4fc; text-transform:uppercase; letter-spacing:0.5px; font-weight:700;">Active Patient Profile</div>
-          <div style="font-weight:700; font-size:16px; color:#ffffff;" id="profile-display-name">__PATIENT_NAME__</div>
-        </div>
-      </div>
-      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <input type="text" id="custom-patient-name" value="__PATIENT_NAME__" placeholder="Your Name" style="padding:6px 12px; border-radius:8px; border:1px solid #4338ca; background:#0f172a; color:#fff; font-size:13px; width:160px;">
-        <input type="text" id="custom-patient-age" value="__PATIENT_AGE__" placeholder="Age" style="padding:6px 10px; border-radius:8px; border:1px solid #4338ca; background:#0f172a; color:#fff; font-size:13px; width:65px;">
-        <select id="custom-patient-gender" style="padding:6px 10px; border-radius:8px; border:1px solid #4338ca; background:#0f172a; color:#fff; font-size:13px;">
-          <option value="Male">Male</option>
-          <option value="Female">Female</option>
-          <option value="Other">Other</option>
-        </select>
-        <button class="btn btn-purple" style="padding:6px 14px; font-size:12px;" onclick="savePatientProfile()">💾 Update Profile</button>
-      </div>
-    </div>
-
     <!-- Upload & Input Card -->
     <div class="card" style="border: 1px solid #7c3aed; background: linear-gradient(180deg, #1b1736 0%, #111827 100%);">
       <div class="card-header">
@@ -579,7 +630,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         <!-- Quick Preset Reply Chips -->
         <div class="presets-container" id="companion-presets-bar" style="display:none;">
           <span style="font-size: 11px; color: var(--text-muted); align-self: center;">Quick Replies:</span>
-          <button class="chip" onclick="useCompanionPreset('हाँ जी, मैं ही बात कर रहा हूँ।')">1. Identity Confirm</button>
+          <button class="chip" id="preset-reply-confirm" onclick="useCompanionPreset(this.innerText)">1. हाँ जी, मैं ही बात कर रहा हूँ।</button>
           <button class="chip" onclick="useCompanionPreset('हाँ, मैंने समय पर अपनी दवाइयाँ ले ली हैं और अब बेहतर लग रहा है।')">2. Normal Adherence</button>
           <button class="chip" onclick="useCompanionPreset('कल से उल्टी जैसा लग रहा था इसलिए मैंने दवाई नहीं ली और अब छाती में दर्द हो रहा है।')">3. Missed Dose + Chest Pain</button>
         </div>
@@ -604,13 +655,13 @@ HTML_CONTENT = """<!DOCTYPE html>
       <div style="display:flex; flex-direction:column; gap:20px;">
         <div class="card">
           <div class="card-header">
-            <h2 id="tab3-patient-header">🧑‍⚕️ Active Patient: <span id="tab3-patient-name">__PATIENT_NAME__</span></h2>
-            <span class="badge" style="color:#60a5fa;" id="tab3-patient-id">__PATIENT_ID__</span>
+            <h2 id="tab3-patient-header">🧑‍⚕️ Active Patient: <span id="tab3-patient-name" style="color:#60a5fa;">Awaiting Name Input</span></h2>
+            <span class="badge" style="color:#60a5fa;" id="tab3-patient-id">PATIENT</span>
           </div>
-          <div class="meta-row"><span class="meta-label">Demographics</span><span class="meta-value" id="tab3-patient-demo">__PATIENT_DEMO__</span></div>
-          <div class="meta-row"><span class="meta-label">Phone</span><span class="meta-value" id="tab3-patient-phone">__PATIENT_PHONE__</span></div>
-          <div class="meta-row"><span class="meta-label">Language</span><span class="meta-value" style="color:#34d399;" id="tab3-patient-lang">__PATIENT_LANG__</span></div>
-          <div class="meta-row"><span class="meta-label">Active Prescriptions</span><span class="meta-value" id="tab3-meds-list">__MEDICATIONS_HTML__</span></div>
+          <div class="meta-row"><span class="meta-label">Demographics</span><span class="meta-value" id="tab3-patient-demo">Awaiting Input</span></div>
+          <div class="meta-row"><span class="meta-label">Phone</span><span class="meta-value" id="tab3-patient-phone">+91-98765-43210</span></div>
+          <div class="meta-row"><span class="meta-label">Language</span><span class="meta-value" style="color:#34d399;" id="tab3-patient-lang">Hindi</span></div>
+          <div class="meta-row"><span class="meta-label">Active Prescriptions</span><span class="meta-value" id="tab3-meds-list">None recorded (Upload in Tab 2)</span></div>
         </div>
 
         <div class="card">
@@ -627,17 +678,126 @@ HTML_CONTENT = """<!DOCTYPE html>
 </div>
 
 <script>
+// ── CLIENT-SIDE STORAGE & PROFILE MANAGEMENT ────────────────────────────────
+function getStoredProfile() {
+  try {
+    const raw = localStorage.getItem('sarvam_patient_profile');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return { name: '', age: '', gender: '', language: 'Hindi' };
+}
+
+function saveStoredProfile(p) {
+  try {
+    localStorage.setItem('sarvam_patient_profile', JSON.stringify(p));
+  } catch (e) {}
+}
+
+function getStoredTimetable() {
+  try {
+    const raw = localStorage.getItem('sarvam_patient_timetable');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return null;
+}
+
+function saveStoredTimetable(tt) {
+  try {
+    localStorage.setItem('sarvam_patient_timetable', JSON.stringify(tt));
+  } catch (e) {}
+}
+
+// Initialize on page load
+window.addEventListener('DOMContentLoaded', () => {
+  const profile = getStoredProfile();
+  if (profile.name) document.getElementById('patient-name-input').value = profile.name;
+  if (profile.age) document.getElementById('patient-age-input').value = profile.age;
+  if (profile.gender) document.getElementById('patient-gender-input').value = profile.gender;
+  if (profile.language) {
+    document.getElementById('patient-lang-input').value = profile.language;
+  }
+  updateProfileBadge();
+
+  // Load stored timetable if any exists on this device
+  const tt = getStoredTimetable();
+  if (tt) {
+    renderTimetable(tt);
+  }
+});
+
+function onProfileInputChanged() {
+  const name = document.getElementById('patient-name-input').value.trim();
+  const age = document.getElementById('patient-age-input').value.trim();
+  const gender = document.getElementById('patient-gender-input').value;
+  const lang = document.getElementById('patient-lang-input').value;
+
+  const profile = { name, age, gender, language: lang };
+  saveStoredProfile(profile);
+  updateProfileBadge();
+
+  // Also update backend session
+  if (name && age && gender) {
+    fetch('/api/update-patient', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ patient_name: name, age: age, gender: gender, language: lang })
+    }).catch(() => {});
+  }
+}
+
+function updateProfileBadge() {
+  const name = document.getElementById('patient-name-input').value.trim();
+  const age = document.getElementById('patient-age-input').value.trim();
+  const gender = document.getElementById('patient-gender-input').value;
+  const lang = document.getElementById('patient-lang-input').value;
+  const badge = document.getElementById('profile-status-badge');
+
+  if (name && age && gender) {
+    badge.className = 'badge active';
+    badge.style.background = 'rgba(16, 185, 129, 0.2)';
+    badge.style.color = '#34d399';
+    badge.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+    badge.innerText = `✅ Active: ${name} (${age} Y / ${gender})`;
+
+    document.getElementById('tab3-patient-name').innerText = name;
+    document.getElementById('tab3-patient-demo').innerText = `${age} Y / ${gender}`;
+    document.getElementById('tab3-patient-lang').innerText = lang;
+
+    const confirmChip = document.getElementById('preset-reply-confirm');
+    if (confirmChip) confirmChip.innerText = `1. हाँ जी, मैं ${name} ही बात कर रहा हूँ।`;
+  } else {
+    badge.className = 'badge';
+    badge.style.background = 'rgba(245, 158, 11, 0.2)';
+    badge.style.color = '#fbbf24';
+    badge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+    badge.innerText = '⚠️ Please Enter Name, Age & Gender Above';
+
+    document.getElementById('tab3-patient-name').innerText = name || 'Awaiting Name Input';
+    document.getElementById('tab3-patient-demo').innerText = (age && gender) ? `${age} Y / ${gender}` : 'Awaiting Input';
+  }
+}
+
+function requireProfileValidation() {
+  const name = document.getElementById('patient-name-input').value.trim();
+  const age = document.getElementById('patient-age-input').value.trim();
+  const gender = document.getElementById('patient-gender-input').value;
+
+  if (!name || !age || !gender) {
+    alert("⚠️ Please fill in your Full Name, Age, and Gender in the Patient Details form at the top first!");
+    const nameInput = document.getElementById('patient-name-input');
+    nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    nameInput.focus();
+    return null;
+  }
+  return { name, age, gender, language: document.getElementById('patient-lang-input').value };
+}
+
 // ── TAB SWITCHING ──────────────────────────────────────────────────────────
 function switchTab(tabId) {
   ['diagnose', 'prescription', 'companion'].forEach(t => {
     document.getElementById('tab-' + t).style.display = (t === tabId ? 'block' : 'none');
     document.getElementById('tab-btn-' + t).classList.toggle('active', t === tabId);
   });
-}
-
-function onLanguageChange() {
-  const lang = document.getElementById('lang-select').value;
-  savePatientProfile();
 }
 
 function setPreset(txt) {
@@ -650,9 +810,12 @@ let diagMediaRecorder = null;
 let diagAudioChunks = [];
 
 async function toggleDiagMic() {
+  const profile = requireProfileValidation();
+  if (!profile) return;
+
   const btn = document.getElementById('diag-mic-btn');
   const txt = document.getElementById('diag-mic-text');
-  const lang = document.getElementById('lang-select').value;
+  const lang = profile.language;
 
   if (!isDiagRecording) {
     try {
@@ -673,7 +836,7 @@ async function toggleDiagMic() {
           const res = await fetch('/api/diagnose-voice', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ audio_base64: b64, language: lang })
+            body: JSON.stringify({ audio_base64: b64, language: lang, age: profile.age, gender: profile.gender })
           });
           const data = await res.json();
           btn.disabled = false;
@@ -705,8 +868,10 @@ async function toggleDiagMic() {
 }
 
 async function runDiagnosis() {
+  const profile = requireProfileValidation();
+  if (!profile) return;
+
   const text = document.getElementById('diag-input').value.trim();
-  const lang = document.getElementById('lang-select').value;
   const btn = document.getElementById('diag-submit-btn');
 
   if (!text) {
@@ -721,7 +886,13 @@ async function runDiagnosis() {
     const res = await fetch('/api/diagnose', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ symptoms: text, language: lang })
+      body: JSON.stringify({
+        symptoms: text,
+        language: profile.language,
+        patient_name: profile.name,
+        age: profile.age,
+        gender: profile.gender
+      })
     });
     const data = await res.json();
     btn.disabled = false;
@@ -858,35 +1029,11 @@ function setPrescriptionPreset(text) {
   document.getElementById('prescription-text-input').value = text;
 }
 
-async function savePatientProfile() {
-  const name = document.getElementById('custom-patient-name').value.trim() || 'Patient';
-  const age = document.getElementById('custom-patient-age').value.trim() || '22';
-  const gender = document.getElementById('custom-patient-gender').value;
-  const lang = document.getElementById('lang-select').value;
-
-  const res = await fetch('/api/update-patient', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ patient_name: name, age: age, gender: gender, language: lang })
-  });
-  const data = await res.json();
-  if (data.status === 'success') {
-    document.getElementById('profile-display-name').innerText = name;
-    const patNameEl = document.getElementById('tab3-patient-name');
-    if (patNameEl) patNameEl.innerText = name;
-    const patDemoEl = document.getElementById('tab3-patient-demo');
-    if (patDemoEl) patDemoEl.innerText = `${age} Y / ${gender}`;
-    const patLangEl = document.getElementById('tab3-patient-lang');
-    if (patLangEl) patLangEl.innerText = lang;
-  }
-}
-
 async function processPrescription() {
+  const profile = requireProfileValidation();
+  if (!profile) return;
+
   const textInput = document.getElementById('prescription-text-input').value.trim();
-  const name = document.getElementById('custom-patient-name').value.trim() || 'Patient';
-  const age = document.getElementById('custom-patient-age').value.trim() || '22';
-  const gender = document.getElementById('custom-patient-gender').value;
-  const lang = document.getElementById('lang-select').value;
   const btn = document.getElementById('process-prescription-btn');
 
   if (!textInput && !uploadedFileBase64) {
@@ -905,10 +1052,10 @@ async function processPrescription() {
         prescription_text: textInput,
         file_base64: uploadedFileBase64,
         file_name: uploadedFileName,
-        patient_name: name,
-        age: age,
-        gender: gender,
-        language: lang
+        patient_name: profile.name,
+        age: profile.age,
+        gender: profile.gender,
+        language: profile.language
       })
     });
     const data = await res.json();
@@ -916,6 +1063,7 @@ async function processPrescription() {
     btn.innerText = '⚡ Process Prescription & Generate Timetable';
 
     if (data.timetable) {
+      saveStoredTimetable(data.timetable);
       renderTimetable(data.timetable);
     } else {
       alert("Could not extract timetable. Please check prescription details.");
@@ -937,8 +1085,6 @@ function renderTimetable(tt) {
     <div style="margin-top:4px; color:#cbd5e1;"><strong>Doctor's Advice:</strong> ${tt.doctor_notes || 'Take all medicines as directed.'}</div>
   `;
 
-  // Update profile display and Tab 3
-  document.getElementById('profile-display-name').innerText = tt.patient_name || 'Patient';
   const tab3Name = document.getElementById('tab3-patient-name');
   if (tab3Name) tab3Name.innerText = tt.patient_name || 'Patient';
 
@@ -1002,8 +1148,9 @@ function toggleMedTaken(rowId, checkbox) {
 }
 
 function playSlotVoice(speechText) {
+  const profile = getStoredProfile();
   if (!speechText) speechText = "नमस्ते, यह आपकी दवाई लेने का समय है।";
-  const lang = document.getElementById('lang-select').value;
+  const lang = profile.language || 'Hindi';
   fetch('/api/speak-reminder', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -1028,6 +1175,9 @@ let compMediaRecorder = null;
 let compAudioChunks = [];
 
 async function startCall() {
+  const profile = requireProfileValidation();
+  if (!profile) return;
+
   document.getElementById('call-window').innerHTML = '';
   document.getElementById('start-call-btn').style.display = 'none';
   document.getElementById('end-call-btn').style.display = 'inline-flex';
@@ -1037,10 +1187,17 @@ async function startCall() {
   document.getElementById('comp-send-btn').disabled = false;
   document.getElementById('comp-user-input').focus();
 
+  const tt = getStoredTimetable();
+  const medsList = tt && tt.medications_list ? tt.medications_list : [];
+
   const res = await fetch('/api/start-call', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({patient_id: '__PATIENT_ID__'})
+    body: JSON.stringify({
+      patient_name: profile.name,
+      language: profile.language,
+      medications: medsList
+    })
   });
   const data = await res.json();
   callHistory = data.history;
@@ -1071,6 +1228,7 @@ function appendCallMsg(role, text, audioB64) {
 }
 
 async function toggleCompanionRecording() {
+  const profile = getStoredProfile();
   const btn = document.getElementById('comp-record-btn');
   const txt = document.getElementById('comp-mic-text');
 
@@ -1098,11 +1256,14 @@ async function toggleCompanionRecording() {
           win.appendChild(loading);
           win.scrollTop = win.scrollHeight;
 
+          const tt = getStoredTimetable();
           const res = await fetch('/api/voice-turn', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-              patient_id: '__PATIENT_ID__',
+              patient_name: profile.name,
+              language: profile.language,
+              medications: tt && tt.medications_list ? tt.medications_list : [],
               history: callHistory,
               audio_base64: b64
             })
@@ -1136,6 +1297,7 @@ async function toggleCompanionRecording() {
 }
 
 async function sendCompanionTurn() {
+  const profile = getStoredProfile();
   const inputEl = document.getElementById('comp-user-input');
   const text = inputEl.value.trim();
   if (!text) return;
@@ -1145,11 +1307,14 @@ async function sendCompanionTurn() {
   inputEl.disabled = true;
   document.getElementById('comp-send-btn').disabled = true;
 
+  const tt = getStoredTimetable();
   const res = await fetch('/api/chat-turn', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      patient_id: '__PATIENT_ID__',
+      patient_name: profile.name,
+      language: profile.language,
+      medications: tt && tt.medications_list ? tt.medications_list : [],
       history: callHistory,
       user_text: text
     })
@@ -1169,15 +1334,22 @@ function useCompanionPreset(text) {
 }
 
 async function endCall() {
+  const profile = getStoredProfile();
   document.getElementById('comp-record-btn').disabled = true;
   document.getElementById('comp-user-input').disabled = true;
   document.getElementById('comp-send-btn').disabled = true;
   document.getElementById('end-call-btn').innerText = '⏳ Evaluating...';
 
+  const tt = getStoredTimetable();
   const res = await fetch('/api/end-call', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({patient_id: '__PATIENT_ID__', history: callHistory})
+    body: JSON.stringify({
+      patient_name: profile.name,
+      language: profile.language,
+      medications: tt && tt.medications_list ? tt.medications_list : [],
+      history: callHistory
+    })
   });
   const data = await res.json();
   document.getElementById('start-call-btn').style.display = 'inline-flex';
@@ -1206,9 +1378,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if self.path == "/api/diagnose":
             symptoms = req_data.get("symptoms", "")
             lang = req_data.get("language", "Hindi")
-            print(f"[diagnoser] Analyzing symptoms via Sarvam-105B: '{symptoms[:60]}...'")
+            age = req_data.get("age", "")
+            gender = req_data.get("gender", "")
+            
+            full_symptoms = symptoms
+            if age or gender:
+                full_symptoms = f"Patient Profile: {age} years old, {gender}.\nSymptoms reported: {symptoms}"
 
-            assessment = diagnose_symptoms(symptoms, language=lang)
+            print(f"[diagnoser] Analyzing symptoms via Sarvam-105B: '{full_symptoms[:60]}...'")
+            assessment = diagnose_symptoms(full_symptoms, language=lang)
             self._send_json({"assessment": assessment})
             return
 
@@ -1216,13 +1394,19 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if self.path == "/api/diagnose-voice":
             audio_b64 = req_data.get("audio_base64", "")
             lang = req_data.get("language", "Hindi")
+            age = req_data.get("age", "")
+            gender = req_data.get("gender", "")
             raw_audio = base64.b64decode(audio_b64)
 
             print(f"[diagnoser] Transcribing voice symptoms via Saaras v4 ({len(raw_audio)} bytes)...")
             user_transcript = transcribe_audio_bytes(raw_audio, language=lang)
             print(f"[diagnoser] Transcribed problem: '{user_transcript}'")
 
-            assessment = diagnose_symptoms(user_transcript, language=lang)
+            full_symptoms = user_transcript
+            if age or gender:
+                full_symptoms = f"Patient Profile: {age} years old, {gender}.\nSymptoms reported: {user_transcript}"
+
+            assessment = diagnose_symptoms(full_symptoms, language=lang)
             self._send_json({
                 "user_transcript": user_transcript,
                 "assessment": assessment
@@ -1244,7 +1428,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             file_b64 = req_data.get("file_base64", "")
             file_name = req_data.get("file_name", "")
             patient_name = req_data.get("patient_name", "Patient")
-            age = req_data.get("age", "22")
+            age = req_data.get("age", "25")
             gender = req_data.get("gender", "Male")
             lang = req_data.get("language", "Hindi")
 
@@ -1275,26 +1459,23 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         # ── ENDPOINT: UPDATE PATIENT PROFILE ────────────────────────────────
         if self.path == "/api/update-patient":
             patient_name = req_data.get("patient_name", "Patient")
-            age = req_data.get("age", "22")
-            gender = req_data.get("gender", "Male")
+            age = req_data.get("age", "")
+            gender = req_data.get("gender", "")
             lang = req_data.get("language", "Hindi")
 
-            data = get_db_data()
-            curr = data.get("patient") or {}
-            patient_id = curr.get("patient_id", f"PAT-{abs(hash(patient_name)) % 100000:05d}")
-
+            patient_id = f"PAT-{abs(hash(patient_name)) % 100000:05d}"
             updated = {
                 "patient_id": patient_id,
                 "name": patient_name,
                 "age": age,
                 "gender": gender,
-                "phone": curr.get("phone", "+91-98765-43210"),
+                "phone": "+91-98765-43210",
                 "language": lang,
-                "discharge_date": curr.get("discharge_date", "Today"),
-                "diagnoses": curr.get("diagnoses", ["General Outpatient Care"]),
-                "medications": curr.get("medications", []),
-                "follow_ups": curr.get("follow_ups", []),
-                "checklist": curr.get("checklist", {})
+                "discharge_date": "Today",
+                "diagnoses": ["General Outpatient Care"],
+                "medications": [],
+                "follow_ups": [],
+                "checklist": {}
             }
             save_patient(updated)
             self._send_json({"status": "success", "patient": updated})
@@ -1302,26 +1483,37 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         # ── ENDPOINT: START COMPANION OUTBOUND CALL ─────────────────────────
         if self.path == "/api/start-call":
-            data = get_db_data()
-            patient = data.get("patient") or {
-                "patient_id": "PAT-00101",
-                "name": "Patient",
-                "language": "Hindi",
-                "medications": ["Prescribed Medicines"]
+            p_name = req_data.get("patient_name", "Patient")
+            lang = req_data.get("language", "Hindi")
+            meds = req_data.get("medications", ["Prescribed Medicines"])
+
+            patient = {
+                "patient_id": f"PAT-{abs(hash(p_name)) % 100000:05d}",
+                "name": p_name,
+                "language": lang,
+                "medications": meds
             }
             history = []
             agent_text = generate_agent_reply(patient, history)
             history.append({"role": "assistant", "content": agent_text})
 
-            audio_bytes = speak_turn(agent_text, language=patient.get("language", "Hindi"), pace=0.95)
+            audio_bytes = speak_turn(agent_text, language=lang, pace=0.95)
             b64 = base64.b64encode(audio_bytes).decode("utf-8")
             self._send_json({"agent_text": agent_text, "audio_base64": b64, "history": history})
             return
 
         # ── ENDPOINT: CHAT TURN (COMPANION BOT) ─────────────────────────────
         if self.path == "/api/chat-turn":
-            data = get_db_data()
-            patient = data.get("patient") or {}
+            p_name = req_data.get("patient_name", "Patient")
+            lang = req_data.get("language", "Hindi")
+            meds = req_data.get("medications", ["Prescribed Medicines"])
+
+            patient = {
+                "patient_id": f"PAT-{abs(hash(p_name)) % 100000:05d}",
+                "name": p_name,
+                "language": lang,
+                "medications": meds
+            }
             history = req_data.get("history", [])
             user_text = req_data.get("user_text", "")
             if user_text:
@@ -1330,19 +1522,26 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             agent_text = generate_agent_reply(patient, history)
             history.append({"role": "assistant", "content": agent_text})
 
-            audio_bytes = speak_turn(agent_text, language=patient.get("language", "Hindi"), pace=0.95)
+            audio_bytes = speak_turn(agent_text, language=lang, pace=0.95)
             b64 = base64.b64encode(audio_bytes).decode("utf-8")
             self._send_json({"agent_text": agent_text, "audio_base64": b64, "history": history})
             return
 
         # ── ENDPOINT: VOICE TURN (COMPANION BOT MIC RECORDING) ──────────────
         if self.path == "/api/voice-turn":
-            data = get_db_data()
-            patient = data.get("patient") or {}
+            p_name = req_data.get("patient_name", "Patient")
+            lang = req_data.get("language", "Hindi")
+            meds = req_data.get("medications", ["Prescribed Medicines"])
+
+            patient = {
+                "patient_id": f"PAT-{abs(hash(p_name)) % 100000:05d}",
+                "name": p_name,
+                "language": lang,
+                "medications": meds
+            }
             history = req_data.get("history", [])
             audio_b64 = req_data.get("audio_base64", "")
             raw_audio = base64.b64decode(audio_b64)
-            lang = patient.get("language", "Hindi")
 
             user_transcript = transcribe_audio_bytes(raw_audio, language=lang)
             history.append({"role": "user", "content": user_transcript})
@@ -1362,8 +1561,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         # ── ENDPOINT: END CALL & CLINICAL EVALUATION ─────────────────────────
         if self.path == "/api/end-call":
-            data = get_db_data()
-            patient = data.get("patient") or {}
+            p_name = req_data.get("patient_name", "Patient")
+            lang = req_data.get("language", "Hindi")
+            meds = req_data.get("medications", ["Prescribed Medicines"])
+
+            patient = {
+                "patient_id": f"PAT-{abs(hash(p_name)) % 100000:05d}",
+                "name": p_name,
+                "language": lang,
+                "phone": "+91-98765-43210",
+                "medications": meds
+            }
             history = req_data.get("history", [])
 
             evaluation = evaluate_call_outcome(patient, history)
@@ -1434,69 +1642,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return
 
         if parsed.path == "/" or parsed.path == "/index.html":
-            data = get_db_data()
-            patient = data.get("patient") or {
-                "patient_id": "PAT-00101",
-                "name": "Patient",
-                "age": "22",
-                "gender": "Male",
-                "phone": "+91-98765-43210",
-                "language": "Hindi",
-                "discharge_date": "Today",
-                "medications": []
-            }
-            logs = data.get("logs") or []
-            latest_log = logs[0] if logs else {}
-
-            esc = latest_log.get("escalation_details")
-            if esc and latest_log.get("escalated"):
-                esc_html = f"""
-                <div class="escalation-box">
-                  <div class="alert-header">
-                    <div class="alert-title">
-                      <span class="pulse-dot"></span>
-                      CRITICAL CLINICAL ESCALATION ALERT — {esc.get('alert_id')}
-                    </div>
-                    <span class="badge" style="background: rgba(239, 68, 68, 0.3); color: #fca5a5;">PRIORITY: {esc.get('priority', 'CRITICAL')}</span>
-                  </div>
-                  <div class="alert-body">
-                    <div><strong>Patient:</strong> {esc.get('patient_name')} ({esc.get('phone')}) | <strong>Language:</strong> {esc.get('language')}</div>
-                    <div style="margin-top: 6px;"><strong>Flags:</strong> {' '.join([f'<span class="tag-flag">{f}</span>' for f in esc.get('flags', [])])}</div>
-                    <div style="margin-top: 6px;"><strong>Missed Prescriptions:</strong> {', '.join(esc.get('missed_medications', []))}</div>
-                    <div style="background: rgba(0,0,0,0.3); padding: 12px 14px; border-radius: 8px; margin: 10px 0; border-left: 3px solid var(--red);">
-                      <strong>Patient Telephony Report (Mayura English Translation):</strong><br>
-                      {esc.get('patient_voice_notes_en', 'No translation available')}
-                    </div>
-                    <div style="background: rgba(239, 68, 68, 0.2); color: #fecaca; padding: 10px 14px; border-radius: 8px; font-weight: 600; margin-top: 10px;">
-                      ⚡ Action Required: {esc.get('recommended_action', 'Contact patient immediately')}
-                    </div>
-                  </div>
-                </div>
-                """
-            else:
-                esc_html = """
-                <div style="background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 14px 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px; color: #94a3b8; font-size: 13.5px;">
-                  <span style="color: #34d399; font-size: 16px;">✔</span>
-                  All post-discharge patients currently reviewed. No pending high-priority clinical alarms.
-                </div>
-                """
-
-            meds = patient.get("medications", [])
-            meds_html = ""
-            for m in meds:
-                name = m.get("name", str(m)) if isinstance(m, dict) else str(m)
-                meds_html += f'<span class="med-tag">{name}</span>'
+            esc_html = """
+            <div style="background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 14px 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px; color: #94a3b8; font-size: 13.5px;">
+              <span style="color: #34d399; font-size: 16px;">✔</span>
+              Clinical Monitoring Active. Emergency escalations will appear here if red flags are detected.
+            </div>
+            """
 
             html = HTML_CONTENT.replace("__ESCALATION_BLOCK__", esc_html)
-            html = html.replace("__PATIENT_ID__", patient.get("patient_id", "PAT-00101"))
-            html = html.replace("__PATIENT_NAME__", patient.get("name", "Patient"))
-            html = html.replace("__PATIENT_AGE__", str(patient.get("age", "22")))
-            html = html.replace("__PATIENT_DEMO__", f"{patient.get('age', '22')} Y / {patient.get('gender', 'Male')}")
-            html = html.replace("__PATIENT_PHONE__", patient.get("phone", "+91-98765-43210"))
-            html = html.replace("__PATIENT_LANG__", patient.get("language", "Hindi"))
-            html = html.replace("__DISCHARGE_DATE__", patient.get("discharge_date", "Today"))
-            html = html.replace("__MEDICATIONS_HTML__", meds_html or "None recorded (Upload prescription in Tab 2)")
-
             encoded = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
