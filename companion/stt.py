@@ -14,16 +14,28 @@ from typing import Union, Optional
 API_URL = "https://api.sarvam.ai/speech-to-text"
 
 LANGUAGE_CODE_MAP = {
-    "telugu": "te-IN",
     "hindi": "hi-IN",
-    "tamil": "ta-IN",
     "bengali": "bn-IN",
+    "telugu": "te-IN",
+    "tamil": "ta-IN",
     "marathi": "mr-IN",
     "gujarati": "gu-IN",
     "kannada": "kn-IN",
     "malayalam": "ml-IN",
     "punjabi": "pa-IN",
     "odia": "od-IN",
+    "assamese": "as-IN",
+    "urdu": "ur-IN",
+    "nepali": "ne-IN",
+    "maithili": "mai-IN",
+    "konkani": "kok-IN",
+    "kashmiri": "ks-IN",
+    "sindhi": "sd-IN",
+    "sanskrit": "sa-IN",
+    "santali": "sat-IN",
+    "manipuri": "mni-IN",
+    "bodo": "brx-IN",
+    "dogri": "doi-IN",
     "english": "en-IN",
 }
 

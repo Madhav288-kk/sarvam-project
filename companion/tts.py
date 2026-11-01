@@ -15,10 +15,10 @@ from typing import Optional, Union
 API_URL = "https://api.sarvam.ai/text-to-speech"
 
 LANGUAGE_CODE_MAP = {
-    "telugu": "te-IN",
     "hindi": "hi-IN",
-    "tamil": "ta-IN",
     "bengali": "bn-IN",
+    "telugu": "te-IN",
+    "tamil": "ta-IN",
     "marathi": "mr-IN",
     "gujarati": "gu-IN",
     "kannada": "kn-IN",
@@ -26,6 +26,19 @@ LANGUAGE_CODE_MAP = {
     "punjabi": "pa-IN",
     "odia": "od-IN",
     "english": "en-IN",
+    # Extended Indic languages mapped to compatible high-accuracy voices:
+    "assamese": "bn-IN",
+    "urdu": "hi-IN",
+    "maithili": "hi-IN",
+    "nepali": "hi-IN",
+    "konkani": "mr-IN",
+    "kashmiri": "hi-IN",
+    "sindhi": "hi-IN",
+    "sanskrit": "hi-IN",
+    "santali": "od-IN",
+    "manipuri": "bn-IN",
+    "bodo": "bn-IN",
+    "dogri": "pa-IN",
 }
 
 

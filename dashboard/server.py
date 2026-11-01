@@ -473,16 +473,31 @@ HTML_CONTENT = """<!DOCTYPE html>
         </select>
       </div>
       <div class="form-group">
-        <label>Preferred Language</label>
+        <label>Preferred Language (22 Indic Languages + English)</label>
         <select id="patient-lang-input" class="form-input" onchange="onProfileInputChanged()">
           <option value="Hindi" selected>🇮🇳 Hindi (हिन्दी)</option>
+          <option value="Bengali">🇮🇳 Bengali (বাংলা)</option>
           <option value="Telugu">🇮🇳 Telugu (తెలుగు)</option>
           <option value="Tamil">🇮🇳 Tamil (தமிழ்)</option>
-          <option value="Bengali">🇮🇳 Bengali (বাংলা)</option>
           <option value="Marathi">🇮🇳 Marathi (मराठी)</option>
           <option value="Gujarati">🇮🇳 Gujarati (ગુજરાતી)</option>
           <option value="Kannada">🇮🇳 Kannada (ಕನ್ನಡ)</option>
-          <option value="English">🌐 English</option>
+          <option value="Malayalam">🇮🇳 Malayalam (മലയാളം)</option>
+          <option value="Punjabi">🇮🇳 Punjabi (ਪੰਜਾਬੀ)</option>
+          <option value="Odia">🇮🇳 Odia (ଓଡ଼ିଆ)</option>
+          <option value="Assamese">🇮🇳 Assamese (অসমীয়া)</option>
+          <option value="Urdu">🇮🇳 Urdu (اردو)</option>
+          <option value="Maithili">🇮🇳 Maithili (मैथिली)</option>
+          <option value="Nepali">🇮🇳 Nepali (नेपाली)</option>
+          <option value="Konkani">🇮🇳 Konkani (कोंकणी)</option>
+          <option value="Kashmiri">🇮🇳 Kashmiri (کٲشُر / कश्मीरी)</option>
+          <option value="Sindhi">🇮🇳 Sindhi (سنڌي / सिंधी)</option>
+          <option value="Sanskrit">🇮🇳 Sanskrit (संस्कृतम्)</option>
+          <option value="Dogri">🇮🇳 Dogri (डोगरी)</option>
+          <option value="Manipuri">🇮🇳 Manipuri (মৈতৈলোন্)</option>
+          <option value="Santali">🇮🇳 Santali (ᱥᱟᱱᱛᱟᱲᱤ)</option>
+          <option value="Bodo">🇮🇳 Bodo (बड़ो)</option>
+          <option value="English">🌐 English (Indian English)</option>
         </select>
       </div>
     </div>
