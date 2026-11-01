@@ -1,0 +1,4 @@
+sarvamai>=0.1.41
+requests>=2.31.0
+json-repair>=0.64.0
+fpdf2>=2.8.0
