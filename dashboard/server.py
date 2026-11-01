@@ -3,8 +3,8 @@ dashboard/server.py
 ───────────────────
 Full Interactive Healthcare Platform with:
   1. 🩺 AI Symptom Diagnoser & Triage (with safe low-risk pain relief medicines)
-  2. 📄 Prescription Uploader & Smart Medication Reminder Timetable
-  3. 📋 Post-Discharge Patient Companion & Outbound Telephony Bot
+  2. 📄 Interactive Prescription Uploader & Smart Medication Reminder Timetable (Sarvam Vision 2.1 + Sarvam-105B)
+  3. 📋 Post-Discharge Patient Companion & Outbound Telephony Bot (Saaras v4 + Bulbul v3 + Mayura Translate)
 
 Usage:
     python dashboard/server.py [port]  (default: 8080)
@@ -43,6 +43,7 @@ from companion.tts import speak_turn
 from companion.stt import transcribe_audio_bytes
 from companion.escalate import create_escalation_alert
 from diagnoser.engine import diagnose_symptoms
+from decoder.timetable import parse_prescription_text, process_uploaded_file
 from sarvamai import SarvamAI
 import json_repair
 
@@ -53,7 +54,7 @@ def get_db_data():
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
 
-    p_row = conn.execute("SELECT * FROM patients LIMIT 1").fetchone()
+    p_row = conn.execute("SELECT * FROM patients ORDER BY created_at DESC LIMIT 1").fetchone()
     patient = dict(p_row) if p_row else None
     if patient:
         for k in ["diagnoses", "medications", "follow_ups", "checklist"]:
@@ -82,303 +83,237 @@ HTML_CONTENT = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Sarvam AI — Healthcare Diagnostic & Medication Platform</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sarvam AI — Healthcare Diagnostic & Medication Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #090d16;
       --card-bg: #111827;
-      --card-border: #1f293d;
-      --text-main: #f8fafc;
+      --border: #1f2937;
+      --text: #f3f4f6;
       --text-muted: #94a3b8;
-      --accent: #3b82f6;
-      --accent-glow: rgba(59, 130, 246, 0.25);
-      --red: #ef4444;
-      --green: #10b981;
-      --amber: #f59e0b;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
       --purple: #8b5cf6;
-      --font: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      --purple-hover: #7c3aed;
+      --green: #10b981;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: var(--bg);
-      color: var(--text-main);
+      background-color: var(--bg);
+      color: var(--text);
       font-family: var(--font);
       line-height: 1.5;
       padding: 24px;
+      min-height: 100vh;
     }
 
-    .container { max-width: 1380px; margin: 0 auto; }
-    
+    .container { max-width: 1200px; margin: 0 auto; }
+
     header {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      margin-bottom: 24px;
       padding-bottom: 20px;
-      border-bottom: 1px solid var(--card-border);
-      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
     }
-
-    .brand { display: flex; align-items: center; gap: 14px; }
-    .brand-logo {
-      width: 44px;
-      height: 44px;
-      background: linear-gradient(135deg, #2563eb, #7c3aed);
-      border-radius: 12px;
+    .header-left h1 {
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(90deg, #60a5fa, #a78bfa, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
       display: flex;
       align-items: center;
-      justify-content: center;
-      font-weight: 800;
-      font-size: 22px;
-      box-shadow: 0 0 25px rgba(99, 102, 241, 0.45);
+      gap: 10px;
     }
-    .brand-title h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
-    .brand-title p { font-size: 13px; color: var(--text-muted); }
+    .header-left p { color: var(--text-muted); font-size: 13.5px; margin-top: 4px; }
 
-    /* Mode Navigation Tabs */
+    /* 3-Way Tabs */
     .tabs-bar {
       display: flex;
-      gap: 10px;
+      gap: 12px;
       margin-bottom: 24px;
-      background: #0f172a;
-      padding: 6px;
-      border-radius: 14px;
-      border: 1px solid var(--card-border);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
     }
     .tab-btn {
-      flex: 1;
-      padding: 12px 18px;
-      border-radius: 10px;
-      border: none;
-      background: transparent;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
       color: var(--text-muted);
-      font-weight: 600;
-      font-size: 13.5px;
+      padding: 10px 18px;
+      border-radius: 10px;
       cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.2s;
       display: flex;
       align-items: center;
-      justify-content: center;
       gap: 8px;
-      transition: all 0.2s;
-      font-family: var(--font);
     }
-    .tab-btn:hover { color: white; background: rgba(255,255,255,0.04); }
+    .tab-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
     .tab-btn.active {
-      background: #1e293b;
-      color: white;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-      border: 1px solid rgba(255,255,255,0.1);
+      background: linear-gradient(135deg, #1d4ed8, #2563eb);
+      color: #fff;
+      border-color: #3b82f6;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
     }
 
-    .tag-engine { display: flex; gap: 8px; flex-wrap: wrap; }
-    .badge {
-      font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: #1e293b;
-      color: #94a3b8;
-      border: 1px solid #334155;
-      font-family: var(--font-mono);
-    }
-    .badge.active { background: rgba(16, 185, 129, 0.15); color: #34d399; border-color: rgba(16, 185, 129, 0.3); }
-
+    /* Cards */
     .card {
       background: var(--card-bg);
-      border: 1px solid var(--card-border);
+      border: 1px solid var(--border);
       border-radius: 16px;
       padding: 24px;
-      box-shadow: 0 4px 25px rgba(0,0,0,0.3);
       margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
-
     .card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
     }
-    .card-header h2 { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .card-header h2 { font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 
-    /* Diagnoser Section Styles */
-    .diagnoser-hero {
-      background: linear-gradient(180deg, #131d33 0%, #111827 100%);
-      border: 1px solid #3b82f6;
-      box-shadow: 0 0 35px rgba(59, 130, 246, 0.15);
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
     }
+    .badge.active { background: rgba(16, 185, 129, 0.15); color: #34d399; border-color: rgba(16, 185, 129, 0.3); }
+
+    /* Inputs & Buttons */
     .symptom-textarea {
       width: 100%;
-      min-height: 110px;
-      background: #0b1120;
-      border: 1px solid #334155;
+      height: 110px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
       border-radius: 12px;
-      color: white;
-      padding: 14px 16px;
-      font-size: 14.5px;
-      line-height: 1.6;
-      outline: none;
+      color: #fff;
       font-family: var(--font);
+      font-size: 14px;
+      padding: 14px;
       resize: vertical;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
+      outline: none;
+      transition: border 0.2s;
     }
-    .symptom-textarea:focus { border-color: #3b82f6; box-shadow: 0 0 15px rgba(59,130,246,0.3); }
-
-    .action-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
+    .symptom-textarea:focus { border-color: var(--primary); }
 
     .btn {
-      background: #2563eb;
+      background: var(--primary);
       color: white;
       border: none;
+      padding: 10px 20px;
       border-radius: 10px;
-      padding: 12px 22px;
+      font-size: 13.5px;
       font-weight: 600;
-      font-size: 14px;
       cursor: pointer;
-      font-family: var(--font);
       display: inline-flex;
       align-items: center;
       gap: 8px;
       transition: all 0.2s;
     }
-    .btn:hover { background: #1d4ed8; }
-    .btn-green { background: #059669; }
-    .btn-green:hover { background: #047857; }
-    .btn-purple { background: #7c3aed; }
-    .btn-purple:hover { background: #6d28d9; }
-    .btn-red { background: #dc2626; }
+    .btn:hover { background: var(--primary-hover); transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-green { background: var(--green); }
+    .btn-green:hover { background: #059669; }
+    .btn-purple { background: var(--purple); }
+    .btn-purple:hover { background: var(--purple-hover); }
+    .btn-red { background: var(--red); }
+    .btn-red:hover { background: #dc2626; }
 
     .mic-btn {
-      background: #1e293b;
-      color: #93c5fd;
-      border: 1px solid #3b82f6;
+      background: #1f2937;
+      color: #cbd5e1;
+      border: 1px solid #374151;
+      padding: 10px 18px;
       border-radius: 10px;
-      padding: 12px 18px;
-      font-weight: 600;
       font-size: 13.5px;
+      font-weight: 600;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       gap: 8px;
       transition: all 0.2s;
     }
-    .mic-btn:hover { background: #2563eb; color: white; }
+    .mic-btn:hover { background: #374151; color: white; }
     .mic-btn.recording {
-      background: #dc2626 !important;
-      color: white !important;
-      border-color: #ef4444 !important;
-      animation: pulse-mic 1.2s infinite;
+      background: #dc2626;
+      border-color: #ef4444;
+      color: white;
+      animation: pulse 1.5s infinite;
     }
-    @keyframes pulse-mic {
+
+    @keyframes pulse {
       0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-      70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+      70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
       100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
     }
 
     .chip {
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      color: #cbd5e1;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 5px 12px;
+      border-radius: 16px;
       font-size: 12px;
-      padding: 6px 12px;
-      border-radius: 8px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.15s;
     }
-    .chip:hover { background: rgba(59, 130, 246, 0.2); border-color: #3b82f6; color: white; }
+    .chip:hover { background: rgba(59, 130, 246, 0.2); border-color: var(--primary); color: #fff; }
 
-    /* Diagnostic Result Card */
-    .diagnostic-result {
-      margin-top: 24px;
-      background: #0f172a;
-      border: 1px solid #334155;
+    /* Diagnostic Cards */
+    .triage-card {
       border-radius: 14px;
-      padding: 24px;
-      animation: fadeIn 0.4s ease-out;
-    }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-
-    .triage-banner {
-      padding: 14px 18px;
-      border-radius: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      padding: 18px 22px;
       margin-bottom: 20px;
-      font-weight: 700;
-      font-size: 15px;
-    }
-    .triage-EMERGENCY { background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; }
-    .triage-URGENT { background: rgba(245, 158, 11, 0.2); border: 1px solid #f59e0b; color: #fde68a; }
-    .triage-ROUTINE { background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #a7f3d0; }
-
-    .diag-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-    .diag-card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 16px;
-    }
-    .diag-card-title {
-      font-weight: 700;
-      font-size: 14.5px;
-      margin-bottom: 6px;
-      color: #93c5fd;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .diag-reasoning { font-size: 13px; color: #cbd5e1; line-height: 1.5; }
+    .triage-card.routine { background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; }
+    .triage-card.urgent { background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); color: #fbbf24; }
+    .triage-card.emergency { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; }
 
-    /* Safe Pain Relief Card */
-    .pain-relief-card {
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(15, 23, 42, 1) 100%);
+    .relief-box {
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.08) 0%, rgba(17, 24, 39, 0.9) 100%);
       border: 1px solid rgba(16, 185, 129, 0.35);
-      border-radius: 12px;
-      padding: 18px;
-      margin-bottom: 20px;
+      border-radius: 14px;
+      padding: 20px;
+      margin-top: 18px;
     }
-    .pain-relief-item {
-      background: rgba(0,0,0,0.25);
-      border-left: 3px solid #10b981;
-      padding: 10px 14px;
-      border-radius: 6px;
-      margin-top: 8px;
-      font-size: 13px;
-    }
-
-    .red-flag-box {
-      background: rgba(239, 68, 68, 0.1);
-      border-left: 4px solid var(--red);
+    .medicine-card {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid #1f2937;
+      border-radius: 10px;
       padding: 14px 16px;
-      border-radius: 8px;
-      margin-bottom: 16px;
+      margin-top: 10px;
     }
-    .test-tag {
-      display: inline-block;
-      background: #1e293b;
-      border: 1px solid #475569;
-      color: #e2e8f0;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 12px;
-      margin: 3px;
+    .med-header {
+      display: flex;
+      justify-content: space-between;
+      font-weight: 700;
+      color: #34d399;
+      font-size: 14px;
     }
+    .med-dose { font-size: 13px; color: #e2e8f0; margin-top: 4px; }
+    .med-note { font-size: 12px; color: #94a3b8; margin-top: 4px; }
 
     /* Timetable Reminder Card */
     .time-slot {
@@ -400,24 +335,39 @@ HTML_CONTENT = """<!DOCTYPE html>
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 8px 10px;
-      background: rgba(0,0,0,0.2);
+      padding: 10px 14px;
+      background: rgba(0,0,0,0.25);
       border-radius: 8px;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       font-size: 13px;
+      transition: background 0.2s;
+    }
+
+    /* Profile Ribbon */
+    .profile-banner {
+      background: linear-gradient(90deg, #1e1b4b 0%, #0f172a 100%);
+      border: 1px solid #4338ca;
+      border-radius: 12px;
+      padding: 14px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 14px;
     }
 
     /* Upload Box */
     .drop-zone {
-      border: 2px dashed #3b82f6;
+      border: 2px dashed #7c3aed;
       border-radius: 14px;
-      padding: 34px 20px;
+      padding: 30px 20px;
       text-align: center;
-      background: rgba(59, 130, 246, 0.05);
+      background: rgba(124, 58, 237, 0.05);
       cursor: pointer;
       transition: all 0.2s;
     }
-    .drop-zone:hover { background: rgba(59, 130, 246, 0.12); border-color: #60a5fa; }
+    .drop-zone:hover { background: rgba(124, 58, 237, 0.12); border-color: #a78bfa; }
 
     /* Companion Layout */
     .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
@@ -430,23 +380,39 @@ HTML_CONTENT = """<!DOCTYPE html>
     .chat-patient { align-self: flex-end; background: linear-gradient(135deg, #1d4ed8, #2563eb); color: white; border-bottom-right-radius: 2px; }
     .escalation-box { background: linear-gradient(180deg, rgba(239, 68, 68, 0.12) 0%, rgba(17, 24, 39, 1) 100%); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 14px; padding: 20px; margin-bottom: 24px; }
     .tag-flag { background: #991b1b; color: #fee2e2; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 4px; }
+    .play-turn-btn { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 3px 8px; border-radius: 6px; font-size: 11px; cursor: pointer; margin-left: 6px; }
+    .bubble-speaker { display: flex; justify-content: space-between; align-items: center; font-size: 11px; opacity: 0.8; margin-bottom: 4px; font-weight: 600; }
+    .input-bar { display: flex; gap: 8px; }
+    .input-bar input { flex: 1; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 10px; color: white; padding: 10px 14px; font-size: 13.5px; outline: none; }
+    .presets-container { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .med-tag { display: inline-block; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; padding: 3px 10px; border-radius: 12px; font-size: 12px; margin: 3px; }
+
+    @media (max-width: 768px) {
+      body { padding: 12px; }
+      .main-grid { grid-template-columns: 1fr; }
+      .tabs-bar { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
+
 <div class="container">
   <header>
-    <div class="brand">
-      <div class="brand-logo">S</div>
-      <div class="brand-title">
-        <h1>Sarvam AI — Clinical Triage & Medication Platform</h1>
-        <p>Symptom Diagnostic Copilot • Prescription Parser & Reminders • Indic Multilingual</p>
-      </div>
+    <div class="header-left">
+      <h1>🩺 Sarvam AI Healthcare Platform</h1>
+      <p>AI Clinical Diagnoser • Prescription Digitizer & Reminders • Sovereign Multilingual</p>
     </div>
-    <div class="tag-engine">
-      <span class="badge active">● AI Clinical Engine Online</span>
-      <span class="badge">Model: Sarvam-105B</span>
-      <span class="badge">Vision 2.1</span>
-      <span class="badge">TTS: Bulbul v3</span>
+    <div>
+      <select id="lang-select" style="background:#1f2937; color:#fff; border:1px solid #374151; padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;" onchange="onLanguageChange()">
+        <option value="Hindi" selected>🇮🇳 Hindi (हिन्दी)</option>
+        <option value="Telugu">🇮🇳 Telugu (తెలుగు)</option>
+        <option value="Tamil">🇮🇳 Tamil (தமிழ்)</option>
+        <option value="Bengali">🇮🇳 Bengali (বাংলা)</option>
+        <option value="Marathi">🇮🇳 Marathi (मराठी)</option>
+        <option value="Gujarati">🇮🇳 Gujarati (ગુજરાતી)</option>
+        <option value="Kannada">🇮🇳 Kannada (ಕನ್ನಡ)</option>
+        <option value="English">🌐 English</option>
+      </select>
     </div>
   </header>
 
@@ -459,7 +425,7 @@ HTML_CONTENT = """<!DOCTYPE html>
       📄 Upload Prescription & Smart Reminders
     </button>
     <button class="tab-btn" id="tab-btn-companion" onclick="switchTab('companion')">
-      📋 Post-Discharge Follow-Up & Voice Bot
+      📋 Outbound Voice Follow-Up Companion
     </button>
   </div>
 
@@ -467,17 +433,17 @@ HTML_CONTENT = """<!DOCTYPE html>
   <!-- TAB 1: INTERACTIVE SYMPTOM DIAGNOSER + SAFE PAIN RELIEF            -->
   <!-- ════════════════════════════════════════════════════════════════════ -->
   <div id="tab-diagnose">
-    <div class="card diagnoser-hero">
+    <div class="card">
       <div class="card-header">
         <h2>🩺 State Your Symptoms or Medical Problem</h2>
-        <span class="badge" style="color: #60a5fa;">Direct Clinical Evaluation</span>
+        <span class="badge" style="color: #60a5fa;">Sarvam-105B Clinical Engine</span>
       </div>
 
       <p style="font-size: 13.5px; color: #94a3b8; margin-bottom: 12px;">
-        Tell the AI what you are feeling. It will provide a <strong>differential diagnosis, triage level, and safe low-risk pain relief medicines/remedies</strong> with minimal side effects.
+        Tell the AI what you are feeling. It will formulate a <strong>differential diagnosis, triage level, and safe low-risk pain relief guidance</strong> with minimal side effects.
       </p>
 
-      <textarea id="diag-input" class="symptom-textarea" placeholder="उदाहरण: मुझे 2 दिन से सिर में तेज दर्द और बुखार है, क्या मैं कोई सुरक्षित दवाई ले सकता हूँ जिससे दर्द में राहत मिले? (Or describe your symptoms in English)..."></textarea>
+      <textarea id="diag-input" class="symptom-textarea" placeholder="उदाहरण: मुझे 2 दिन से सिर में तेज दर्द और बुखार है, क्या मैं कोई सुरक्षित दवाई ले सकता हूँ जिससे दर्द में राहत मिले? (Or describe in English)..."></textarea>
 
       <!-- Quick Preset Symptom Chips -->
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
@@ -488,14 +454,14 @@ HTML_CONTENT = """<!DOCTYPE html>
         <button class="chip" onclick="setPreset('गले में बहुत दर्द और खराश है, कुछ भी निगलने में दर्द हो रहा है।')">4. Sore Throat & Swallowing Pain</button>
       </div>
 
-      <div class="action-row">
+      <div style="display:flex; gap:12px; justify-content:space-between; align-items:center;">
         <button class="mic-btn" id="diag-mic-btn" onclick="toggleDiagMic()">
           <span id="diag-mic-icon">🎙️</span>
-          <span id="diag-mic-text">Speak Problem (Mic)</span>
+          <span id="diag-mic-text">Speak Problem (Saaras v4 Mic)</span>
         </button>
 
         <button class="btn btn-green" id="diag-submit-btn" onclick="runDiagnosis()">
-          🔍 Analyze & Suggest Safe Relief
+          🔍 Analyze Symptoms & Suggest Safe Relief
         </button>
       </div>
     </div>
@@ -505,96 +471,85 @@ HTML_CONTENT = """<!DOCTYPE html>
   </div>
 
   <!-- ════════════════════════════════════════════════════════════════════ -->
-  <!-- TAB 2: UPLOAD PRESCRIPTION & MEDICATION REMINDERS                   -->
+  <!-- TAB 2: INTERACTIVE PRESCRIPTION UPLOADER & TIMETABLE                -->
   <!-- ════════════════════════════════════════════════════════════════════ -->
   <div id="tab-prescription" style="display:none;">
-    <div class="card" style="border: 1px solid #7c3aed; background: linear-gradient(180deg, #1b1736 0%, #111827 100%);">
-      <div class="card-header">
-        <h2>📄 Upload Prescription / Discharge Summary</h2>
-        <span class="badge" style="background: rgba(124, 58, 237, 0.3); color: #c4b5fd;">Sarvam Vision 2.1 OCR</span>
+    <!-- Active Patient Profile Ribbon -->
+    <div class="profile-banner">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:26px;">👤</span>
+        <div>
+          <div style="font-size:11px; color:#a5b4fc; text-transform:uppercase; letter-spacing:0.5px; font-weight:700;">Active Patient Profile</div>
+          <div style="font-weight:700; font-size:16px; color:#ffffff;" id="profile-display-name">__PATIENT_NAME__</div>
+        </div>
       </div>
-      <p style="font-size: 13.5px; color: #cbd5e1; margin-bottom: 16px;">
-        Upload your doctor's prescription or discharge letter. The AI will extract all medicines, dosages, and instructions, and build your <strong>Daily Medication Reminder Timetable</strong>.
-      </p>
-
-      <div class="drop-zone" onclick="document.getElementById('prescription-file-input').click()">
-        <div style="font-size: 36px; margin-bottom: 8px;">📑</div>
-        <div style="font-weight: 700; font-size: 15px; color: #c4b5fd;">Click to Upload Prescription or Discharge File</div>
-        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Supports PDF, PNG, JPG (Or use the pre-loaded Apollo discharge summary)</div>
-      </div>
-      <input type="file" id="prescription-file-input" style="display:none;" accept=".pdf,.png,.jpg,.jpeg" onchange="handlePrescriptionFile(this)">
-
-      <div style="margin-top: 16px; display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:12.5px; color:#94a3b8;">Already have a file? You can also load the mock discharge summary:</span>
-        <button class="btn btn-purple" onclick="loadMockPrescription()">⚡ Parse Mock Discharge Prescription</button>
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <input type="text" id="custom-patient-name" value="__PATIENT_NAME__" placeholder="Your Name" style="padding:6px 12px; border-radius:8px; border:1px solid #4338ca; background:#0f172a; color:#fff; font-size:13px; width:160px;">
+        <input type="text" id="custom-patient-age" value="__PATIENT_AGE__" placeholder="Age" style="padding:6px 10px; border-radius:8px; border:1px solid #4338ca; background:#0f172a; color:#fff; font-size:13px; width:65px;">
+        <select id="custom-patient-gender" style="padding:6px 10px; border-radius:8px; border:1px solid #4338ca; background:#0f172a; color:#fff; font-size:13px;">
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Other">Other</option>
+        </select>
+        <button class="btn btn-purple" style="padding:6px 14px; font-size:12px;" onclick="savePatientProfile()">💾 Update Profile</button>
       </div>
     </div>
 
-    <!-- Medication Reminder Timetable Display -->
-    <div id="reminder-timetable-container">
+    <!-- Upload & Input Card -->
+    <div class="card" style="border: 1px solid #7c3aed; background: linear-gradient(180deg, #1b1736 0%, #111827 100%);">
+      <div class="card-header">
+        <h2>📄 Upload Prescription / Doctor Notes</h2>
+        <span class="badge" style="background: rgba(124, 58, 237, 0.3); color: #c4b5fd;">Sarvam Vision 2.1 OCR + Sarvam-105B</span>
+      </div>
+      <p style="font-size: 13.5px; color: #cbd5e1; margin-bottom: 16px;">
+        Upload any prescription file (PDF/Image) <strong>OR</strong> type/paste doctor instructions. The AI extracts all medicines, dosages, and schedules, building your <strong>Personalized Daily Medication Timetable with Spoken Hindi/Indic Alarms</strong>.
+      </p>
+
+      <!-- Drag & Drop Zone -->
+      <div class="drop-zone" onclick="document.getElementById('prescription-file-input').click()">
+        <div style="font-size: 34px; margin-bottom: 6px;">📑</div>
+        <div style="font-weight: 700; font-size: 15px; color: #c4b5fd;" id="drop-zone-text">Click to Select Prescription File (PDF, PNG, JPG)</div>
+        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Supports hospital discharge summaries, prescription slips, and clinic notes</div>
+      </div>
+      <input type="file" id="prescription-file-input" style="display:none;" accept=".pdf,.png,.jpg,.jpeg" onchange="onFileSelected(this)">
+
+      <!-- OR Direct Text Input -->
+      <div style="margin-top: 18px;">
+        <label style="font-size: 13px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 6px;">
+          ✍️ Or Type / Paste Prescription Details Directly:
+        </label>
+        <textarea id="prescription-text-input" class="symptom-textarea" style="height: 100px;" placeholder="उदाहरण: Tab Paracetamol 650mg morning & night after food for fever, Tab Pantocid 40mg once in morning before breakfast, Cap Azithromycin 500mg afternoon after lunch for 3 days..."></textarea>
+      </div>
+
+      <!-- Quick 1-Click Interactive Prescriptions -->
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin: 12px 0;">
+        <span style="font-size:11px; color:#94a3b8; align-self:center;">Quick 1-Click Samples:</span>
+        <button class="chip" onclick="setPrescriptionPreset('Tab. Paracetamol 650mg — 1 tablet morning & night after food for fever & body ache.\nTab. Pantocid 40mg — 1 tablet in morning before breakfast (empty stomach).\nCap. Azithromycin 500mg — 1 capsule once daily after lunch for 3 days.\nTab. Cetirizine 10mg — 1 tablet at bedtime for cold & sneezing.')">1. Fever, Cold & Antibiotic</button>
+        <button class="chip" onclick="setPrescriptionPreset('Tab. Metformin 500mg — 1 tablet twice daily after morning breakfast and dinner for blood sugar.\nTab. Telmisartan 40mg — 1 tablet every morning after breakfast for blood pressure.\nTab. Atorvastatin 10mg — 1 tablet at night before bedtime for cholesterol.')">2. Diabetes & Hypertension</button>
+        <button class="chip" onclick="setPrescriptionPreset('Tab. Cefixime 200mg — 1 tablet twice daily after meals for 5 days post-surgery.\nTab. Aceclofenac + Paracetamol — 1 tablet morning & evening after meals for surgical pain relief.\nCap. Pan-D — 1 capsule morning before breakfast.\nTab. Chymoral Forte — 1 tablet 3 times daily 30 minutes before food for wound swelling.')">3. Post-Surgery Recovery Regimen</button>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:16px;">
+        <button class="btn btn-purple" id="process-prescription-btn" onclick="processPrescription()">
+          ⚡ Process Prescription & Generate Timetable
+        </button>
+      </div>
+    </div>
+
+    <!-- Dynamic Timetable Container -->
+    <div id="reminder-timetable-container" style="display:none; margin-top:20px;">
       <div class="card">
         <div class="card-header">
-          <h2>⏰ Daily Medication Reminder Timetable (Active Schedule)</h2>
-          <span class="badge active">● Live Alarms Active</span>
+          <h2 id="timetable-title">⏰ Daily Medication Reminder Timetable</h2>
+          <span class="badge active" id="timetable-status-badge">● Personalized Alarms Active</span>
         </div>
         
-        <div id="timetable-slots-list">
-          <!-- Morning Slot -->
-          <div class="time-slot">
-            <div class="slot-header">
-              <span style="color: #fde047;">🌅 Morning (08:00 AM) — With Breakfast</span>
-              <span class="badge">3 Medicines</span>
-            </div>
-            <div class="med-item-row">
-              <div><strong>Tab. Metformin 500mg</strong> — 1 Tablet (नाश्ते के बाद, शुगर नियंत्रण)</div>
-              <input type="checkbox" checked title="Mark as taken">
-            </div>
-            <div class="med-item-row">
-              <div><strong>Tab. Glimepiride 2mg</strong> — 1 Tablet (नाश्ते से पहले)</div>
-              <input type="checkbox" checked title="Mark as taken">
-            </div>
-            <div class="med-item-row">
-              <div><strong>Tab. Amlodipine 5mg</strong> — 1 Tablet (पानी के साथ, बीपी नियंत्रण)</div>
-              <input type="checkbox" checked title="Mark as taken">
-            </div>
-          </div>
-
-          <!-- Afternoon Slot -->
-          <div class="time-slot">
-            <div class="slot-header">
-              <span style="color: #60a5fa;">☀️ Afternoon (01:30 PM) — After Lunch</span>
-              <span class="badge">2 Medicines</span>
-            </div>
-            <div class="med-item-row">
-              <div><strong>Tab. Calcium + Vit D3</strong> — 1 Tablet (दोपहर के खाने के बाद)</div>
-              <input type="checkbox" title="Mark as taken">
-            </div>
-            <div class="med-item-row">
-              <div><strong>Tab. Furosemide 40mg</strong> — 1 Tablet (सूजन कम करने के लिए)</div>
-              <input type="checkbox" title="Mark as taken">
-            </div>
-          </div>
-
-          <!-- Night Slot -->
-          <div class="time-slot">
-            <div class="slot-header">
-              <span style="color: #a78bfa;">🌙 Night (08:30 PM) — After Dinner</span>
-              <span class="badge">2 Medicines</span>
-            </div>
-            <div class="med-item-row">
-              <div><strong>Tab. Metformin 500mg</strong> — 1 Tablet (रात के खाने के बाद)</div>
-              <input type="checkbox" title="Mark as taken">
-            </div>
-            <div class="med-item-row">
-              <div><strong>Tab. Telmisartan 40mg</strong> — 1 Tablet (सोने से पहले, बीपी नियंत्रण)</div>
-              <input type="checkbox" title="Mark as taken">
-            </div>
-          </div>
+        <div id="timetable-meta-box" style="background: rgba(0,0,0,0.25); padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; border-left: 3px solid #7c3aed; font-size: 13px;">
+          <!-- Populated dynamically -->
         </div>
 
-        <div style="background:#1e1b4b; padding:12px 16px; border-radius:10px; border:1px solid #4338ca; display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-size:13px; color:#c7d2fe;">🔊 Voice Reminder Alert (Bulbul v3): <em>"नमस्ते, यह आपकी दोपहर की दवाई का समय है..."</em></span>
-          <button class="btn" style="padding:6px 14px; font-size:12px;" onclick="playVoiceReminder()">▶ Play Spoken Alarm</button>
+        <div id="timetable-slots-list">
+          <!-- Populated dynamically -->
         </div>
       </div>
     </div>
@@ -610,26 +565,23 @@ HTML_CONTENT = """<!DOCTYPE html>
       <!-- Live Call Simulator with Voice Recording -->
       <div class="card live-call-card" style="border: 1px solid #3b82f6;">
         <div class="card-header">
-          <h2>📞 Outbound Voice Check-In Call (Hindi)</h2>
-          <div id="companion-live-indicator" style="display:none;" class="audio-indicator">
-            <span>SPEAKER ACTIVE</span>
-            <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-          </div>
+          <h2>📞 Outbound Voice Check-In Call</h2>
+          <span class="badge active">● AI Bot Ready</span>
         </div>
 
         <div class="call-window" id="call-window">
           <div class="chat-bubble chat-agent">
             <div class="bubble-speaker"><span>🤖 Hospital Care Agent (Bulbul v3)</span></div>
-            <div>Click <strong>"Start Outbound Call"</strong> to receive the call. You can then <strong>speak directly into your microphone</strong> to answer each question!</div>
+            <div>Click <strong>"Start Outbound Call"</strong> to receive the call. The agent will greet you by your name, review your prescribed medicines, and you can <strong>speak directly into your microphone</strong> to answer each question!</div>
           </div>
         </div>
 
         <!-- Quick Preset Reply Chips -->
         <div class="presets-container" id="companion-presets-bar" style="display:none;">
           <span style="font-size: 11px; color: var(--text-muted); align-self: center;">Quick Replies:</span>
-          <button class="chip" onclick="useCompanionPreset('हाँ जी, मैं रमैया वेंकटेश ही बोल रहा हूँ।')">1. Identity Confirm</button>
-          <button class="chip" onclick="useCompanionPreset('हाँ, मैंने समय पर दोनों दवाइयाँ ले ली हैं और अब बेहतर लग रहा है।')">2. Normal Adherence</button>
-          <button class="chip" onclick="useCompanionPreset('कल से उल्टी जैसा लग रहा था इसलिए मैंने दवाइयाँ नहीं लीं और अब छाती में दर्द हो रहा है।')">3. Missed Dose + Chest Pain</button>
+          <button class="chip" onclick="useCompanionPreset('हाँ जी, मैं ही बात कर रहा हूँ।')">1. Identity Confirm</button>
+          <button class="chip" onclick="useCompanionPreset('हाँ, मैंने समय पर अपनी दवाइयाँ ले ली हैं और अब बेहतर लग रहा है।')">2. Normal Adherence</button>
+          <button class="chip" onclick="useCompanionPreset('कल से उल्टी जैसा लग रहा था इसलिए मैंने दवाई नहीं ली और अब छाती में दर्द हो रहा है।')">3. Missed Dose + Chest Pain</button>
         </div>
 
         <!-- Voice Recording & Input Bar -->
@@ -638,41 +590,36 @@ HTML_CONTENT = """<!DOCTYPE html>
             <span id="comp-mic-icon">🎙️</span>
             <span id="comp-mic-text">Record Voice</span>
           </button>
-          <input type="text" id="comp-user-input" placeholder="Or type your reply here (Hindi / English)..." disabled onkeydown="if(event.key==='Enter') sendCompanionTurn()">
+          <input type="text" id="comp-user-input" placeholder="Or type your reply here..." disabled onkeydown="if(event.key==='Enter') sendCompanionTurn()">
           <button class="btn" id="comp-send-btn" onclick="sendCompanionTurn()" disabled>Send</button>
         </div>
 
-        <div class="action-row">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
           <button class="btn btn-green" id="start-call-btn" onclick="startCall()">📞 Start Outbound Call</button>
           <button class="btn btn-red" id="end-call-btn" onclick="endCall()" style="display:none;">🛑 End Call & Evaluate</button>
         </div>
       </div>
 
-      <!-- Patient Record & Explanation Audio -->
+      <!-- Patient Record Summary -->
       <div style="display:flex; flex-direction:column; gap:20px;">
         <div class="card">
           <div class="card-header">
-            <h2>🧑‍⚕️ Active Patient: __PATIENT_NAME__</h2>
-            <span class="badge" style="color:#60a5fa;">__PATIENT_ID__</span>
+            <h2 id="tab3-patient-header">🧑‍⚕️ Active Patient: <span id="tab3-patient-name">__PATIENT_NAME__</span></h2>
+            <span class="badge" style="color:#60a5fa;" id="tab3-patient-id">__PATIENT_ID__</span>
           </div>
-          <div class="meta-row"><span class="meta-label">Demographics</span><span class="meta-value">__PATIENT_DEMO__</span></div>
-          <div class="meta-row"><span class="meta-label">Phone</span><span class="meta-value">__PATIENT_PHONE__</span></div>
-          <div class="meta-row"><span class="meta-label">Language</span><span class="meta-value" style="color:#34d399;">__PATIENT_LANG__</span></div>
-          <div class="meta-row"><span class="meta-label">Discharge Date</span><span class="meta-value">__DISCHARGE_DATE__</span></div>
-          <div style="margin-top:12px;">
-            <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Decoded Medications:</div>
-            <div>__MEDICATIONS_HTML__</div>
-          </div>
+          <div class="meta-row"><span class="meta-label">Demographics</span><span class="meta-value" id="tab3-patient-demo">__PATIENT_DEMO__</span></div>
+          <div class="meta-row"><span class="meta-label">Phone</span><span class="meta-value" id="tab3-patient-phone">__PATIENT_PHONE__</span></div>
+          <div class="meta-row"><span class="meta-label">Language</span><span class="meta-value" style="color:#34d399;" id="tab3-patient-lang">__PATIENT_LANG__</span></div>
+          <div class="meta-row"><span class="meta-label">Active Prescriptions</span><span class="meta-value" id="tab3-meds-list">__MEDICATIONS_HTML__</span></div>
         </div>
 
-        <div class="card" style="background: linear-gradient(135deg, #1e1b4b 0%, #111827 100%); border-color: #3730a3;">
+        <div class="card">
           <div class="card-header">
-            <h2>🔊 Native Spoken Discharge Audio (Bulbul v3)</h2>
+            <h2>🛡️ Clinical Triage & Sovereign Intelligence</h2>
           </div>
-          <p style="font-size: 13px; color: #cbd5e1; line-height: 1.6;">
-            2.66-minute complete discharge summary in Hindi voiced by persona <strong>Ritu</strong>.
+          <p style="font-size:13px; color:#94a3b8; line-height:1.6;">
+            If the patient reports missed doses or dangerous symptoms (e.g., chest pain, severe shortness of breath), the system flags the patient, runs <strong>Sarvam Mayura</strong> to translate the alert into English, and notifies the hospital emergency team immediately.
           </p>
-          <audio controls src="/audio/patient_explanation.wav" style="width: 100%; margin-top: 10px;"></audio>
         </div>
       </div>
     </div>
@@ -680,36 +627,32 @@ HTML_CONTENT = """<!DOCTYPE html>
 </div>
 
 <script>
-// Tab Switching
-function switchTab(mode) {
-  const diagTab = document.getElementById('tab-diagnose');
-  const presTab = document.getElementById('tab-prescription');
-  const compTab = document.getElementById('tab-companion');
-  const btnDiag = document.getElementById('tab-btn-diagnose');
-  const btnPres = document.getElementById('tab-btn-prescription');
-  const btnComp = document.getElementById('tab-btn-companion');
-
-  diagTab.style.display = (mode === 'diagnose') ? 'block' : 'none';
-  presTab.style.display = (mode === 'prescription') ? 'block' : 'none';
-  compTab.style.display = (mode === 'companion') ? 'block' : 'none';
-
-  btnDiag.classList.toggle('active', mode === 'diagnose');
-  btnPres.classList.toggle('active', mode === 'prescription');
-  btnComp.classList.toggle('active', mode === 'companion');
+// ── TAB SWITCHING ──────────────────────────────────────────────────────────
+function switchTab(tabId) {
+  ['diagnose', 'prescription', 'companion'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = (t === tabId ? 'block' : 'none');
+    document.getElementById('tab-btn-' + t).classList.toggle('active', t === tabId);
+  });
 }
 
-function setPreset(text) {
-  document.getElementById('diag-input').value = text;
+function onLanguageChange() {
+  const lang = document.getElementById('lang-select').value;
+  savePatientProfile();
 }
 
-// ── SYMPTOM DIAGNOSER ────────────────────────────────────────────────────────
+function setPreset(txt) {
+  document.getElementById('diag-input').value = txt;
+}
+
+// ── TAB 1: DIAGNOSER LOGIC ──────────────────────────────────────────────────
+let isDiagRecording = false;
 let diagMediaRecorder = null;
 let diagAudioChunks = [];
-let isDiagRecording = false;
 
 async function toggleDiagMic() {
   const btn = document.getElementById('diag-mic-btn');
   const txt = document.getElementById('diag-mic-text');
+  const lang = document.getElementById('lang-select').value;
 
   if (!isDiagRecording) {
     try {
@@ -724,151 +667,165 @@ async function toggleDiagMic() {
         reader.readAsDataURL(blob);
         reader.onloadend = async () => {
           const b64 = reader.result.split(',')[1];
-          txt.innerText = 'Transcribing voice (Saaras v4)...';
+          txt.innerText = 'Transcribing voice via Saaras v4...';
           btn.disabled = true;
 
           const res = await fetch('/api/diagnose-voice', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ audio_base64: b64, language: 'Hindi' })
+            body: JSON.stringify({ audio_base64: b64, language: lang })
           });
           const data = await res.json();
-          document.getElementById('diag-input').value = data.user_transcript || '';
-          renderDiagnosis(data.assessment);
           btn.disabled = false;
           btn.classList.remove('recording');
-          txt.innerText = 'Speak Problem (Mic)';
+          txt.innerText = 'Speak Problem (Saaras v4 Mic)';
+
+          if (data.user_transcript) {
+            document.getElementById('diag-input').value = data.user_transcript;
+          }
+          if (data.assessment) {
+            renderDiagnosis(data.assessment);
+          }
         };
       };
 
       diagMediaRecorder.start();
       isDiagRecording = true;
       btn.classList.add('recording');
-      txt.innerText = 'Stop & Diagnose';
-    } catch(err) {
-      alert("Microphone error: " + err.message);
+      txt.innerText = 'Recording... Click to Stop';
+    } catch (err) {
+      alert("Microphone access error: " + err.message + "\\nYou can type your symptoms in the box!");
     }
   } else {
     diagMediaRecorder.stop();
     isDiagRecording = false;
     btn.classList.remove('recording');
-    txt.innerText = 'Processing...';
+    txt.innerText = 'Processing via Saaras v4...';
   }
 }
 
 async function runDiagnosis() {
-  const inputEl = document.getElementById('diag-input');
-  const symptoms = inputEl.value.trim();
-  if (!symptoms) {
-    alert("Please enter or speak your symptoms first!");
+  const text = document.getElementById('diag-input').value.trim();
+  const lang = document.getElementById('lang-select').value;
+  const btn = document.getElementById('diag-submit-btn');
+
+  if (!text) {
+    alert("Please enter or speak your symptoms!");
     return;
   }
 
-  const btn = document.getElementById('diag-submit-btn');
   btn.disabled = true;
-  btn.innerText = '⏳ Analyzing Clinical Symptoms & Safe Relief...';
+  btn.innerText = '🧠 Analyzing with Sarvam-105B...';
 
-  const res = await fetch('/api/diagnose', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ symptoms: symptoms, language: 'Hindi' })
-  });
-  const data = await res.json();
+  try {
+    const res = await fetch('/api/diagnose', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ symptoms: text, language: lang })
+    });
+    const data = await res.json();
+    btn.disabled = false;
+    btn.innerText = '🔍 Analyze Symptoms & Suggest Safe Relief';
 
-  renderDiagnosis(data.assessment);
-  btn.disabled = false;
-  btn.innerText = '🔍 Analyze & Suggest Safe Relief';
+    if (data.assessment) {
+      renderDiagnosis(data.assessment);
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.innerText = '🔍 Analyze Symptoms & Suggest Safe Relief';
+    alert("Error: " + err.message);
+  }
 }
 
 function renderDiagnosis(data) {
   const container = document.getElementById('diag-result-container');
   container.style.display = 'block';
 
-  let triageClass = 'triage-' + (data.triage_level || 'ROUTINE');
-  let diffHtml = '';
-  (data.differential_diagnoses || []).forEach(d => {
-    diffHtml += `
-      <div class="diag-card">
-        <div class="diag-card-title">
-          <span>${d.condition}</span>
-          <span style="font-size:11px; padding:2px 6px; border-radius:4px; background:#334155;">संभावना: ${d.likelihood}</span>
-        </div>
-        <div class="diag-reasoning">${d.clinical_reasoning}</div>
+  let triageClass = 'routine';
+  let triageLabel = 'ROUTINE (सामान्य)';
+  if (data.triage_level === 'EMERGENCY') {
+    triageClass = 'emergency';
+    triageLabel = '🚨 EMERGENCY (तत्काल आपातकालीन चिकित्सा आवश्यक)';
+  } else if (data.triage_level === 'URGENT') {
+    triageClass = 'urgent';
+    triageLabel = '⚠️ URGENT (24-48 घंटे में डॉक्टर को दिखाएं)';
+  }
+
+  let causesHtml = '';
+  (data.likely_causes || []).forEach(c => {
+    causesHtml += `
+      <div style="background:rgba(0,0,0,0.25); padding:10px 14px; border-radius:8px; margin-bottom:8px;">
+        <div style="font-weight:700; color:#93c5fd;">${c.condition} <span class="badge" style="font-size:10px;">संभावना: ${c.likelihood}</span></div>
+        <div style="font-size:12.5px; color:#cbd5e1; margin-top:3px;">${c.clinical_reasoning}</div>
       </div>
     `;
   });
 
-  // Safe Pain Relief HTML
   let reliefHtml = '';
-  (data.safe_pain_relief || []).forEach(r => {
+  const pain = data.pain_relief || {};
+  if (pain.recommended_medicines && pain.recommended_medicines.length > 0) {
+    reliefHtml += `<h3 style="font-size:15px; color:#34d399; margin-top:6px;">💊 अनुशंसित सुरक्षित दवाइयाँ (Safe Minimal-Side-Effect Medications):</h3>`;
+    pain.recommended_medicines.forEach(m => {
+      reliefHtml += `
+        <div class="medicine-card">
+          <div class="med-header">
+            <span>${m.name}</span>
+            <span class="badge" style="color:#34d399;">${m.risk_level || 'Safe'}</span>
+          </div>
+          <div class="med-dose"><strong>खुराक:</strong> ${m.dosage}</div>
+          <div class="med-note"><strong>निर्देश:</strong> ${m.how_to_take} | <strong>सुरक्षा टिप:</strong> ${m.safety_notes}</div>
+        </div>
+      `;
+    });
+  }
+
+  if (pain.home_remedies && pain.home_remedies.length > 0) {
     reliefHtml += `
-      <div class="pain-relief-item">
-        <div style="font-weight:700; color:#34d399; font-size:13.5px;">🌿 ${r.medicine_or_remedy} — ${r.purpose}</div>
-        <div style="color:#e2e8f0; margin-top:2px;"><strong>खुराक और तरीका:</strong> ${r.dosage_and_instructions}</div>
-        <div style="color:#cbd5e1; font-size:12px; margin-top:2px;"><strong>सावधानी:</strong> ${r.safety_caution}</div>
+      <div style="margin-top:14px; background:rgba(255,255,255,0.03); padding:12px; border-radius:8px;">
+        <strong style="color:#6ee7b7; font-size:13px;">🌿 सुरक्षित घरेलू देखभाल:</strong>
+        <ul style="padding-left:20px; font-size:12.5px; color:#cbd5e1; margin-top:4px;">
+          ${pain.home_remedies.map(r => `<li>${r}</li>`).join('')}
+        </ul>
       </div>
     `;
-  });
+  }
 
-  let redFlagsHtml = (data.red_flag_symptoms || []).map(r => `<li>${r}</li>`).join('');
-  let testsHtml = (data.recommended_tests || []).map(t => `<span class="test-tag">🧪 ${t}</span>`).join('');
-  let careHtml = (data.home_care_and_precautions || []).map(c => `<li>${c}</li>`).join('');
-
-  let audioPlayerHtml = '';
-  if (data.audio_base64) {
-    audioPlayerHtml = `
-      <div style="margin-top:14px; background:#1e1b4b; padding:12px 16px; border-radius:10px; border:1px solid #4338ca; display:flex; align-items:center; justify-content:space-between;">
-        <span style="font-size:13px; color:#c7d2fe;">🔊 डॉक्टर का मौखिक स्पष्टीकरण (Bulbul v3 Audio):</span>
-        <button class="btn" style="padding:6px 14px; font-size:12px;" onclick="playAudioBase64('${data.audio_base64}')">▶ सुनें (Play Voice)</button>
+  let redFlagsHtml = '';
+  if (data.red_flag_warnings && data.red_flag_warnings.length > 0) {
+    redFlagsHtml = `
+      <div style="background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.4); border-radius:10px; padding:12px 16px; margin-top:14px;">
+        <strong style="color:#fca5a5; font-size:13px;">🚩 खतरे के संकेत (तुरंत डॉक्टर को दिखाएं):</strong>
+        <ul style="padding-left:20px; font-size:12.5px; color:#fecaca; margin-top:4px;">
+          ${data.red_flag_warnings.map(f => `<li>${f}</li>`).join('')}
+        </ul>
       </div>
     `;
   }
 
   container.innerHTML = `
-    <div class="diagnostic-result">
-      <div class="triage-banner ${triageClass}">
-        <span>🏥 ट्राइएज वर्गीकरण: ${data.triage_label_hi || data.triage_level}</span>
-        <span style="font-family:var(--font-mono); font-size:12px;">LEVEL: ${data.triage_level}</span>
+    <div class="card">
+      <div class="card-header">
+        <h2>📋 AI नैदानिक ट्राइएज रिपोर्ट (Clinical Assessment)</h2>
+        ${data.audio_base64 ? `<button class="btn btn-purple" style="padding:6px 14px; font-size:12px;" onclick="playAudioBase64('${data.audio_base64}')">🔊 Listen Doctor Audio (Bulbul v3)</button>` : ''}
       </div>
 
-      <div style="font-size:14.5px; margin-bottom:18px; color:#f1f5f9; line-height:1.6;">
-        <strong>रोगी की स्थिति का सारांश:</strong> ${data.patient_summary || ''}
-      </div>
-
-      ${audioPlayerHtml}
-
-      <!-- Safe Pain Relief Block -->
-      <div class="pain-relief-card">
-        <div style="font-weight:700; color:#34d399; font-size:15px; display:flex; align-items:center; gap:8px;">
-          <span>💊</span>
-          <span>दर्द निवारण और तत्काल राहत के लिए सुरक्षित उपाय (कम से कम दुष्प्रभाव वाली दवाएं / उपाय):</span>
+      <div class="triage-card ${triageClass}">
+        <div>
+          <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px; font-weight:700;">क्लिनिकल प्राथमिकता (Triage Level)</div>
+          <div style="font-size:16px; font-weight:700; margin-top:2px;">${triageLabel}</div>
         </div>
-        <div style="margin-top:10px;">${reliefHtml || '<div style="font-size:13px; color:#94a3b8;">विश्राम और पर्याप्त जल सेवन की सलाह दी जाती है।</div>'}</div>
-      </div>
-
-      <div style="margin-top:20px; font-size:15px; font-weight:700; margin-bottom:10px; color:#93c5fd;">
-        🩺 संभावित नैदानिक कारण (Differential Diagnoses):
-      </div>
-      <div class="diag-grid">${diffHtml}</div>
-
-      <div class="red-flag-box">
-        <strong style="color:#fca5a5; font-size:14px;">⚠️ आपातकालीन खतरे के संकेत (Red-Flag Warnings):</strong>
-        <ul style="margin-left:20px; margin-top:6px; color:#fecaca; font-size:13px; line-height:1.6;">
-          ${redFlagsHtml}
-        </ul>
       </div>
 
       <div style="margin-bottom:16px;">
-        <div style="font-size:13.5px; font-weight:700; color:#94a3b8; margin-bottom:8px;">डॉक्टर से परामर्श के लिए अनुशंसित जांचें (Recommended Tests):</div>
-        <div>${testsHtml}</div>
+        <h3 style="font-size:14.5px; color:#cbd5e1; margin-bottom:8px;">🔍 संभावित कारण (Differential Diagnosis):</h3>
+        ${causesHtml}
       </div>
 
-      <div style="background:#1e293b; padding:14px 16px; border-radius:10px; border:1px solid #334155;">
-        <strong style="color:#34d399; font-size:13.5px;">💡 तात्कालिक सावधानियां और देखभाल (Home Precautions):</strong>
-        <ul style="margin-left:20px; margin-top:6px; color:#cbd5e1; font-size:13px; line-height:1.6;">
-          ${careHtml}
-        </ul>
+      <div class="relief-box">
+        ${reliefHtml}
       </div>
+
+      ${redFlagsHtml}
 
       <div style="margin-top:14px; font-size:11.5px; color:#64748b; font-style:italic;">
         ⚕️ अस्वीकरण: यह एक AI ट्राइएज मूल्यांकन है। यह किसी योग्य चिकित्सक के प्रत्यक्ष नैदानिक परीक्षण का विकल्प नहीं है। गंभीर स्थिति में तुरंत नजदीकी अस्पताल के आपातकालीन विभाग में जाएं।
@@ -881,24 +838,176 @@ function renderDiagnosis(data) {
   }
 }
 
-// ── PRESCRIPTION UPLOAD & REMINDER ──────────────────────────────────────────
-async function handlePrescriptionFile(input) {
+// ── TAB 2: PRESCRIPTION UPLOAD & DYNAMIC TIMETABLE ──────────────────────────
+let uploadedFileBase64 = null;
+let uploadedFileName = "";
+
+function onFileSelected(input) {
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
-  alert("Uploading & processing prescription '" + file.name + "' via Sarvam Vision 2.1...\\nSetting up your reminder timetable.");
-  loadMockPrescription();
+  uploadedFileName = file.name;
+  document.getElementById('drop-zone-text').innerHTML = `✅ <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB) selected`;
+  const reader = new FileReader();
+  reader.readAsDataURL(file);
+  reader.onloadend = () => {
+    uploadedFileBase64 = reader.result.split(',')[1];
+  };
 }
 
-function loadMockPrescription() {
-  document.getElementById('reminder-timetable-container').scrollIntoView({ behavior: 'smooth' });
+function setPrescriptionPreset(text) {
+  document.getElementById('prescription-text-input').value = text;
 }
 
-function playVoiceReminder() {
-  const reminderText = "नमस्ते, यह आपकी दोपहर की दवाई का समय है। कृपया कैल्शियम और विट डी3 की एक गोली दोपहर के खाने के बाद लें, और पानी की उचित मात्रा रखें।";
+async function savePatientProfile() {
+  const name = document.getElementById('custom-patient-name').value.trim() || 'Patient';
+  const age = document.getElementById('custom-patient-age').value.trim() || '22';
+  const gender = document.getElementById('custom-patient-gender').value;
+  const lang = document.getElementById('lang-select').value;
+
+  const res = await fetch('/api/update-patient', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ patient_name: name, age: age, gender: gender, language: lang })
+  });
+  const data = await res.json();
+  if (data.status === 'success') {
+    document.getElementById('profile-display-name').innerText = name;
+    const patNameEl = document.getElementById('tab3-patient-name');
+    if (patNameEl) patNameEl.innerText = name;
+    const patDemoEl = document.getElementById('tab3-patient-demo');
+    if (patDemoEl) patDemoEl.innerText = `${age} Y / ${gender}`;
+    const patLangEl = document.getElementById('tab3-patient-lang');
+    if (patLangEl) patLangEl.innerText = lang;
+  }
+}
+
+async function processPrescription() {
+  const textInput = document.getElementById('prescription-text-input').value.trim();
+  const name = document.getElementById('custom-patient-name').value.trim() || 'Patient';
+  const age = document.getElementById('custom-patient-age').value.trim() || '22';
+  const gender = document.getElementById('custom-patient-gender').value;
+  const lang = document.getElementById('lang-select').value;
+  const btn = document.getElementById('process-prescription-btn');
+
+  if (!textInput && !uploadedFileBase64) {
+    alert("Please select a prescription file or type your prescription details!");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerText = '🧠 Analyzing with Sarvam AI...';
+
+  try {
+    const res = await fetch('/api/upload-prescription', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        prescription_text: textInput,
+        file_base64: uploadedFileBase64,
+        file_name: uploadedFileName,
+        patient_name: name,
+        age: age,
+        gender: gender,
+        language: lang
+      })
+    });
+    const data = await res.json();
+    btn.disabled = false;
+    btn.innerText = '⚡ Process Prescription & Generate Timetable';
+
+    if (data.timetable) {
+      renderTimetable(data.timetable);
+    } else {
+      alert("Could not extract timetable. Please check prescription details.");
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.innerText = '⚡ Process Prescription & Generate Timetable';
+    alert("Error processing prescription: " + err.message);
+  }
+}
+
+function renderTimetable(tt) {
+  const container = document.getElementById('reminder-timetable-container');
+  container.style.display = 'block';
+
+  document.getElementById('timetable-title').innerText = `⏰ Daily Medication Timetable for ${tt.patient_name || 'Patient'}`;
+  document.getElementById('timetable-meta-box').innerHTML = `
+    <div><strong>Diagnosis / Condition:</strong> ${tt.diagnosis || 'Prescription Care Plan'}</div>
+    <div style="margin-top:4px; color:#cbd5e1;"><strong>Doctor's Advice:</strong> ${tt.doctor_notes || 'Take all medicines as directed.'}</div>
+  `;
+
+  // Update profile display and Tab 3
+  document.getElementById('profile-display-name').innerText = tt.patient_name || 'Patient';
+  const tab3Name = document.getElementById('tab3-patient-name');
+  if (tab3Name) tab3Name.innerText = tt.patient_name || 'Patient';
+
+  const tab3Meds = document.getElementById('tab3-meds-list');
+  if (tab3Meds && tt.medications_list) {
+    tab3Meds.innerHTML = tt.medications_list.map(m => `<span class="med-tag">${m}</span>`).join(' ');
+  }
+
+  const list = document.getElementById('timetable-slots-list');
+  list.innerHTML = '';
+
+  (tt.slots || []).forEach((slot, sIdx) => {
+    const slotDiv = document.createElement('div');
+    slotDiv.className = 'time-slot';
+
+    let medsHtml = '';
+    (slot.medicines || []).forEach((m, mIdx) => {
+      const rowId = `med-row-${sIdx}-${mIdx}`;
+      const speechEscaped = (m.speech || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      medsHtml += `
+        <div class="med-item-row" id="${rowId}">
+          <div style="display:flex; align-items:flex-start; gap:10px;">
+            <input type="checkbox" onchange="toggleMedTaken('${rowId}', this)" title="Mark as taken" style="margin-top:3px; cursor:pointer;">
+            <div>
+              <div class="med-title" style="font-weight:700; color:#fff;">${m.name} <span class="badge" style="font-size:11px;">${m.dosage || '1 Dose'}</span></div>
+              <div style="font-size:12px; color:#a5b4fc; margin-top:2px;">📋 ${m.instructions || 'As advised'}</div>
+              <div style="font-size:11.5px; color:#94a3b8; margin-top:2px;">🎯 ${m.purpose || 'Relief'}</div>
+            </div>
+          </div>
+          <button class="btn btn-purple" style="padding:4px 10px; font-size:11px; white-space:nowrap;" onclick="playSlotVoice('${speechEscaped}')">
+            🔊 Spoken Alarm (Bulbul v3)
+          </button>
+        </div>
+      `;
+    });
+
+    slotDiv.innerHTML = `
+      <div class="slot-header">
+        <span style="color: ${slot.color || '#fde047'}; font-size:14.5px;">${slot.icon || '⏰'} ${slot.name}</span>
+        <span class="badge">${(slot.medicines || []).length} Medicines</span>
+      </div>
+      ${medsHtml}
+    `;
+    list.appendChild(slotDiv);
+  });
+
+  container.scrollIntoView({ behavior: 'smooth' });
+}
+
+function toggleMedTaken(rowId, checkbox) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  const title = row.querySelector('.med-title');
+  if (checkbox.checked) {
+    if (title) title.style.textDecoration = 'line-through';
+    row.style.background = 'rgba(16, 185, 129, 0.15)';
+  } else {
+    if (title) title.style.textDecoration = 'none';
+    row.style.background = 'rgba(0, 0, 0, 0.25)';
+  }
+}
+
+function playSlotVoice(speechText) {
+  if (!speechText) speechText = "नमस्ते, यह आपकी दवाई लेने का समय है।";
+  const lang = document.getElementById('lang-select').value;
   fetch('/api/speak-reminder', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ text: reminderText, language: 'Hindi' })
+    body: JSON.stringify({ text: speechText, language: lang })
   })
   .then(r => r.json())
   .then(data => {
@@ -912,7 +1021,7 @@ function playAudioBase64(base64Data) {
   audio.play();
 }
 
-// ── COMPANION VOICE CALL LOGIC (WITH MIC RECORDING) ─────────────────────────
+// ── TAB 3: COMPANION VOICE CALL LOGIC ───────────────────────────────────────
 let callHistory = [];
 let isCompRecording = false;
 let compMediaRecorder = null;
@@ -978,15 +1087,14 @@ async function toggleCompanionRecording() {
         reader.readAsDataURL(blob);
         reader.onloadend = async () => {
           const b64 = reader.result.split(',')[1];
-          txt.innerText = 'Transcribing voice (Saaras v4)...';
+          txt.innerText = 'Transcribing voice via Saaras v4...';
           btn.disabled = true;
 
-          // Add temporary loading indicator
           const win = document.getElementById('call-window');
           const loading = document.createElement('div');
           loading.className = 'chat-bubble chat-patient';
           loading.id = 'comp-loading-bubble';
-          loading.innerHTML = '<div class="bubble-speaker"><span>👤 Patient (Transcribing via Saaras v4...)</span></div><div>⏳ <em>Transcribing your spoken Hindi voice...</em></div>';
+          loading.innerHTML = '<div class="bubble-speaker"><span>👤 Patient (Transcribing via Saaras v4...)</span></div><div>⏳ <em>Transcribing spoken audio...</em></div>';
           win.appendChild(loading);
           win.scrollTop = win.scrollHeight;
 
@@ -1043,7 +1151,7 @@ async function sendCompanionTurn() {
     body: JSON.stringify({
       patient_id: '__PATIENT_ID__',
       history: callHistory,
-      user_message: text
+      user_text: text
     })
   });
   const data = await res.json();
@@ -1121,7 +1229,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             })
             return
 
-        # ── ENDPOINT: SPEAK REMINDER ────────────────────────────────────────
+        # ── ENDPOINT: SPEAK REMINDER (BULBUL V3) ────────────────────────────
         if self.path == "/api/speak-reminder":
             text = req_data.get("text", "दवाई का समय हो गया है।")
             lang = req_data.get("language", "Hindi")
@@ -1130,9 +1238,77 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._send_json({"audio_base64": b64})
             return
 
-        # ── COMPANION ENDPOINTS ─────────────────────────────────────────────
+        # ── ENDPOINT: PARSE & UPLOAD PRESCRIPTION (SARVAM VISION + 105B) ─────
+        if self.path == "/api/upload-prescription":
+            presc_text = req_data.get("prescription_text", "")
+            file_b64 = req_data.get("file_base64", "")
+            file_name = req_data.get("file_name", "")
+            patient_name = req_data.get("patient_name", "Patient")
+            age = req_data.get("age", "22")
+            gender = req_data.get("gender", "Male")
+            lang = req_data.get("language", "Hindi")
+
+            if file_b64:
+                file_bytes = base64.b64decode(file_b64)
+                print(f"[prescription] Processing uploaded file: {file_name} ({len(file_bytes)} bytes)")
+                timetable = process_uploaded_file(
+                    file_bytes=file_bytes,
+                    filename=file_name or "prescription.pdf",
+                    language=lang,
+                    patient_name=patient_name,
+                    age=age,
+                    gender=gender
+                )
+            else:
+                print(f"[prescription] Parsing prescription text for {patient_name}...")
+                timetable = parse_prescription_text(
+                    prescription_text=presc_text,
+                    language=lang,
+                    patient_name=patient_name,
+                    age=age,
+                    gender=gender
+                )
+
+            self._send_json({"status": "success", "timetable": timetable})
+            return
+
+        # ── ENDPOINT: UPDATE PATIENT PROFILE ────────────────────────────────
+        if self.path == "/api/update-patient":
+            patient_name = req_data.get("patient_name", "Patient")
+            age = req_data.get("age", "22")
+            gender = req_data.get("gender", "Male")
+            lang = req_data.get("language", "Hindi")
+
+            data = get_db_data()
+            curr = data.get("patient") or {}
+            patient_id = curr.get("patient_id", f"PAT-{abs(hash(patient_name)) % 100000:05d}")
+
+            updated = {
+                "patient_id": patient_id,
+                "name": patient_name,
+                "age": age,
+                "gender": gender,
+                "phone": curr.get("phone", "+91-98765-43210"),
+                "language": lang,
+                "discharge_date": curr.get("discharge_date", "Today"),
+                "diagnoses": curr.get("diagnoses", ["General Outpatient Care"]),
+                "medications": curr.get("medications", []),
+                "follow_ups": curr.get("follow_ups", []),
+                "checklist": curr.get("checklist", {})
+            }
+            save_patient(updated)
+            self._send_json({"status": "success", "patient": updated})
+            return
+
+        # ── ENDPOINT: START COMPANION OUTBOUND CALL ─────────────────────────
         if self.path == "/api/start-call":
-            patient = get_patient(req_data.get("patient_id", "APH-2024-087432")) or {}
+            data = get_db_data()
+            patient = data.get("patient") or {
+                "patient_id": "PAT-00101",
+                "name": "Patient",
+                "language": "Hindi",
+                "medications": ["Prescribed Medicines"]
+            }
             history = []
             agent_text = generate_agent_reply(patient, history)
             history.append({"role": "assistant", "content": agent_text})
@@ -1142,8 +1318,52 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._send_json({"agent_text": agent_text, "audio_base64": b64, "history": history})
             return
 
+        # ── ENDPOINT: CHAT TURN (COMPANION BOT) ─────────────────────────────
+        if self.path == "/api/chat-turn":
+            data = get_db_data()
+            patient = data.get("patient") or {}
+            history = req_data.get("history", [])
+            user_text = req_data.get("user_text", "")
+            if user_text:
+                history.append({"role": "user", "content": user_text})
+
+            agent_text = generate_agent_reply(patient, history)
+            history.append({"role": "assistant", "content": agent_text})
+
+            audio_bytes = speak_turn(agent_text, language=patient.get("language", "Hindi"), pace=0.95)
+            b64 = base64.b64encode(audio_bytes).decode("utf-8")
+            self._send_json({"agent_text": agent_text, "audio_base64": b64, "history": history})
+            return
+
+        # ── ENDPOINT: VOICE TURN (COMPANION BOT MIC RECORDING) ──────────────
+        if self.path == "/api/voice-turn":
+            data = get_db_data()
+            patient = data.get("patient") or {}
+            history = req_data.get("history", [])
+            audio_b64 = req_data.get("audio_base64", "")
+            raw_audio = base64.b64decode(audio_b64)
+            lang = patient.get("language", "Hindi")
+
+            user_transcript = transcribe_audio_bytes(raw_audio, language=lang)
+            history.append({"role": "user", "content": user_transcript})
+
+            agent_text = generate_agent_reply(patient, history)
+            history.append({"role": "assistant", "content": agent_text})
+
+            audio_bytes = speak_turn(agent_text, language=lang, pace=0.95)
+            b64 = base64.b64encode(audio_bytes).decode("utf-8")
+            self._send_json({
+                "user_transcript": user_transcript,
+                "agent_text": agent_text,
+                "audio_base64": b64,
+                "history": history
+            })
+            return
+
+        # ── ENDPOINT: END CALL & CLINICAL EVALUATION ─────────────────────────
         if self.path == "/api/end-call":
-            patient = get_patient(req_data.get("patient_id", "APH-2024-087432")) or {}
+            data = get_db_data()
+            patient = data.get("patient") or {}
             history = req_data.get("history", [])
 
             evaluation = evaluate_call_outcome(patient, history)
@@ -1215,7 +1435,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/" or parsed.path == "/index.html":
             data = get_db_data()
-            patient = data.get("patient") or {}
+            patient = data.get("patient") or {
+                "patient_id": "PAT-00101",
+                "name": "Patient",
+                "age": "22",
+                "gender": "Male",
+                "phone": "+91-98765-43210",
+                "language": "Hindi",
+                "discharge_date": "Today",
+                "medications": []
+            }
             logs = data.get("logs") or []
             latest_log = logs[0] if logs else {}
 
@@ -1233,7 +1462,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                   <div class="alert-body">
                     <div><strong>Patient:</strong> {esc.get('patient_name')} ({esc.get('phone')}) | <strong>Language:</strong> {esc.get('language')}</div>
                     <div style="margin-top: 6px;"><strong>Flags:</strong> {' '.join([f'<span class="tag-flag">{f}</span>' for f in esc.get('flags', [])])}</div>
-                    <div style="margin-top: 6px;"><strong>Missed Prescriptions:</strong> {', '.join(escalation.get('missed_medications', []))}</div>
+                    <div style="margin-top: 6px;"><strong>Missed Prescriptions:</strong> {', '.join(esc.get('missed_medications', []))}</div>
                     <div style="background: rgba(0,0,0,0.3); padding: 12px 14px; border-radius: 8px; margin: 10px 0; border-left: 3px solid var(--red);">
                       <strong>Patient Telephony Report (Mayura English Translation):</strong><br>
                       {esc.get('patient_voice_notes_en', 'No translation available')}
@@ -1259,13 +1488,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 meds_html += f'<span class="med-tag">{name}</span>'
 
             html = HTML_CONTENT.replace("__ESCALATION_BLOCK__", esc_html)
-            html = html.replace("__PATIENT_ID__", patient.get("patient_id", "APH-2024-087432"))
-            html = html.replace("__PATIENT_NAME__", patient.get("name", "Ramaiah Venkatesh"))
-            html = html.replace("__PATIENT_DEMO__", f"{patient.get('age', '62')} Y / {patient.get('gender', 'Male')}")
-            html = html.replace("__PATIENT_PHONE__", patient.get("phone", "+91-98490-33214"))
+            html = html.replace("__PATIENT_ID__", patient.get("patient_id", "PAT-00101"))
+            html = html.replace("__PATIENT_NAME__", patient.get("name", "Patient"))
+            html = html.replace("__PATIENT_AGE__", str(patient.get("age", "22")))
+            html = html.replace("__PATIENT_DEMO__", f"{patient.get('age', '22')} Y / {patient.get('gender', 'Male')}")
+            html = html.replace("__PATIENT_PHONE__", patient.get("phone", "+91-98765-43210"))
             html = html.replace("__PATIENT_LANG__", patient.get("language", "Hindi"))
-            html = html.replace("__DISCHARGE_DATE__", patient.get("discharge_date", "25-Oct-2024"))
-            html = html.replace("__MEDICATIONS_HTML__", meds_html or "None recorded")
+            html = html.replace("__DISCHARGE_DATE__", patient.get("discharge_date", "Today"))
+            html = html.replace("__MEDICATIONS_HTML__", meds_html or "None recorded (Upload prescription in Tab 2)")
 
             encoded = html.encode("utf-8")
             self.send_response(200)
