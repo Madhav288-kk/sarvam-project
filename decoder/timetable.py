@@ -33,7 +33,12 @@ from db.patients import save_patient, get_patient
 
 TIMETABLE_SYSTEM_PROMPT = """You are an expert AI Clinical Pharmacist & Medication Schedule Planner.
 Given doctor prescription OCR text or clinical instructions:
-1. Extract patient_name (if mentioned, otherwise use the provided patient name), diagnosis/condition, and doctor_notes.
+1. Extract:
+   - hospital_name: Name of clinic or hospital if mentioned (e.g. 'Sunrise General Hospital', 'Apollo Hospitals'; or null)
+   - doctor_name: Name of prescribing doctor with title if mentioned (e.g. 'Dr. A. Sharma, MD'; or null)
+   - patient_name: Patient name if mentioned in prescription; otherwise use the provided patient name
+   - diagnosis: Clinical condition or reason (e.g. 'Acute viral fever with throat infection')
+   - doctor_notes: Special advice given by doctor
 2. Group ALL prescribed medications accurately into daily time slots based on their frequency:
    - "three times a day" -> Morning, Afternoon, Night
    - "twice a day" -> Morning, Night
@@ -48,6 +53,8 @@ Given doctor prescription OCR text or clinical instructions:
    - speech: Conversational, friendly spoken reminder in the requested language for Bulbul v3 TTS alarm (e.g. "नमस्ते, यह आपकी दवाई लेने का समय है। कृपया भोजन के बाद एक गोली लें।")
 4. Output STRICT JSON:
    {
+     "hospital_name": "...",
+     "doctor_name": "...",
      "patient_name": "...",
      "diagnosis": "...",
      "doctor_notes": "...",
@@ -187,6 +194,8 @@ Prescription Details:
                     "discharge_date": "Today",
                     "diagnoses": [parsed.get("diagnosis", "Prescription Follow-Up")],
                     "medications": med_list,
+                    "doctor_name": parsed.get("doctor_name") or "your doctor",
+                    "hospital_name": parsed.get("hospital_name") or "your hospital",
                     "follow_ups": ["Consult doctor if symptoms persist"],
                     "checklist": parsed
                 }

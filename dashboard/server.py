@@ -594,6 +594,25 @@ HTML_CONTENT = """<!DOCTYPE html>
           <h2 id="timetable-title">⏰ Daily Medication Reminder Timetable</h2>
           <span class="badge active" id="timetable-status-badge">● Personalized Alarms Active</span>
         </div>
+
+        <!-- Master Timetable Audio Player Bar (Bulbul v3) -->
+        <div id="timetable-audio-bar" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; background: rgba(124, 58, 237, 0.15); border: 1px solid rgba(124, 58, 237, 0.35); padding: 12px 16px; border-radius: 10px; margin-bottom: 16px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:22px;">🎧</span>
+            <div>
+              <div style="font-weight:700; font-size:14px; color:#fff;">Spoken Medication Schedule (Sarvam Bulbul v3)</div>
+              <div style="font-size:12px; color:#cbd5e1;" id="timetable-audio-status">Click to listen to complete daily schedule in your selected language</div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn btn-purple" id="btn-play-all-timetable" style="padding: 7px 14px; font-size: 12px; display:inline-flex; align-items:center; gap:6px;" onclick="toggleAllTimetableAudio()">
+              <span id="all-tt-icon">▶️</span> <span id="all-tt-text">Play Full Audio Schedule</span>
+            </button>
+            <button class="btn btn-secondary" id="btn-stop-all-timetable" style="padding: 7px 12px; font-size: 12px; display:none;" onclick="stopAllTimetableAudio()">
+              ⏹️ Stop
+            </button>
+          </div>
+        </div>
         
         <div id="timetable-meta-box" style="background: rgba(0,0,0,0.25); padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; border-left: 3px solid #7c3aed; font-size: 13px;">
           <!-- Populated dynamically -->
@@ -659,8 +678,9 @@ HTML_CONTENT = """<!DOCTYPE html>
             <span class="badge" style="color:#60a5fa;" id="tab3-patient-id">PATIENT</span>
           </div>
           <div class="meta-row"><span class="meta-label">Demographics</span><span class="meta-value" id="tab3-patient-demo">Awaiting Input</span></div>
-          <div class="meta-row"><span class="meta-label">Phone</span><span class="meta-value" id="tab3-patient-phone">+91-98765-43210</span></div>
-          <div class="meta-row"><span class="meta-label">Language</span><span class="meta-value" style="color:#34d399;" id="tab3-patient-lang">Hindi</span></div>
+          <div class="meta-row"><span class="meta-label">Clinic / Hospital</span><span class="meta-value" id="tab3-hospital" style="color:#a5b4fc;">Awaiting Prescription Upload</span></div>
+          <div class="meta-row"><span class="meta-label">Treating Doctor</span><span class="meta-value" id="tab3-doctor" style="color:#a5b4fc;">Awaiting Prescription Upload</span></div>
+          <div class="meta-row"><span class="meta-label">Diagnosis</span><span class="meta-value" id="tab3-diagnosis" style="color:#fbbf24;">Awaiting Prescription Upload</span></div>
           <div class="meta-row"><span class="meta-label">Active Prescriptions</span><span class="meta-value" id="tab3-meds-list">None recorded (Upload in Tab 2)</span></div>
         </div>
 
@@ -1076,6 +1096,7 @@ async function processPrescription() {
 }
 
 function renderTimetable(tt) {
+  currentTimetableData = tt;
   const container = document.getElementById('reminder-timetable-container');
   container.style.display = 'block';
 
@@ -1085,6 +1106,7 @@ function renderTimetable(tt) {
     <div style="margin-top:4px; color:#cbd5e1;"><strong>Doctor's Advice:</strong> ${tt.doctor_notes || 'Take all medicines as directed.'}</div>
   `;
 
+  // Update Tab 3 dynamic patient summary
   const tab3Name = document.getElementById('tab3-patient-name');
   if (tab3Name) tab3Name.innerText = tt.patient_name || 'Patient';
 
@@ -1092,6 +1114,15 @@ function renderTimetable(tt) {
   if (tab3Meds && tt.medications_list) {
     tab3Meds.innerHTML = tt.medications_list.map(m => `<span class="med-tag">${m}</span>`).join(' ');
   }
+
+  const tab3Hosp = document.getElementById('tab3-hospital');
+  if (tab3Hosp) tab3Hosp.innerText = tt.hospital_name || 'General Hospital / Clinic';
+
+  const tab3Doc = document.getElementById('tab3-doctor');
+  if (tab3Doc) tab3Doc.innerText = tt.doctor_name || 'Attending Physician';
+
+  const tab3Diag = document.getElementById('tab3-diagnosis');
+  if (tab3Diag) tab3Diag.innerText = tt.diagnosis || 'Prescription Care Plan';
 
   const list = document.getElementById('timetable-slots-list');
   list.innerHTML = '';
@@ -1114,8 +1145,8 @@ function renderTimetable(tt) {
               <div style="font-size:11.5px; color:#94a3b8; margin-top:2px;">🎯 ${m.purpose || 'Relief'}</div>
             </div>
           </div>
-          <button class="btn btn-purple" style="padding:4px 10px; font-size:11px; white-space:nowrap;" onclick="playSlotVoice('${speechEscaped}')">
-            🔊 Spoken Alarm (Bulbul v3)
+          <button class="btn btn-purple slot-voice-btn" style="padding:5px 12px; font-size:11px; white-space:nowrap; display:inline-flex; align-items:center; gap:5px;" onclick="toggleSlotVoice(this, '${speechEscaped}')">
+            <span>🔊</span> <span>Spoken Alarm (Bulbul v3)</span>
           </button>
         </div>
       `;
@@ -1147,19 +1178,188 @@ function toggleMedTaken(rowId, checkbox) {
   }
 }
 
-function playSlotVoice(speechText) {
+// ── PLAY / PAUSE AUDIO CONTROLLERS FOR TIMETABLE ───────────────────────────
+let activeSlotAudio = null;
+let activeSlotBtn = null;
+let allTimetableAudio = null;
+let currentTimetableData = null;
+
+function stopAllActiveAudio() {
+  if (activeSlotAudio) {
+    activeSlotAudio.pause();
+    activeSlotAudio.currentTime = 0;
+    if (activeSlotBtn) {
+      activeSlotBtn.innerHTML = '<span>🔊</span> <span>Spoken Alarm (Bulbul v3)</span>';
+      activeSlotBtn.classList.remove('btn-secondary');
+      activeSlotBtn.classList.add('btn-purple');
+    }
+    activeSlotAudio = null;
+    activeSlotBtn = null;
+  }
+  if (allTimetableAudio) {
+    allTimetableAudio.pause();
+    allTimetableAudio.currentTime = 0;
+    const playBtn = document.getElementById('btn-play-all-timetable');
+    const stopBtn = document.getElementById('btn-stop-all-timetable');
+    const statusText = document.getElementById('timetable-audio-status');
+    if (playBtn) playBtn.innerHTML = '<span id="all-tt-icon">▶️</span> <span id="all-tt-text">Play Full Audio Schedule</span>';
+    if (stopBtn) stopBtn.style.display = 'none';
+    if (statusText) statusText.innerText = 'Click to listen to complete daily schedule in your selected language';
+    allTimetableAudio = null;
+  }
+}
+
+async function toggleSlotVoice(btn, speechText) {
+  // If clicking on already active slot audio -> toggle pause / play
+  if (activeSlotAudio && activeSlotBtn === btn) {
+    if (!activeSlotAudio.paused) {
+      activeSlotAudio.pause();
+      btn.innerHTML = '<span>▶️</span> <span>Resume Alarm</span>';
+      btn.classList.add('btn-secondary');
+      btn.classList.remove('btn-purple');
+      return;
+    } else {
+      activeSlotAudio.play();
+      btn.innerHTML = '<span>⏸️</span> <span>Pause Alarm</span>';
+      btn.classList.remove('btn-secondary');
+      btn.classList.add('btn-purple');
+      return;
+    }
+  }
+
+  // Stop any other playing audio first
+  stopAllActiveAudio();
+
   const profile = getStoredProfile();
   if (!speechText) speechText = "नमस्ते, यह आपकी दवाई लेने का समय है।";
   const lang = profile.language || 'Hindi';
-  fetch('/api/speak-reminder', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ text: speechText, language: lang })
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (data.audio_base64) playAudioBase64(data.audio_base64);
-  });
+
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span> <span>Generating voice...</span>';
+
+  try {
+    const r = await fetch('/api/speak-reminder', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ text: speechText, language: lang })
+    });
+    const data = await r.json();
+    btn.disabled = false;
+
+    if (data.audio_base64) {
+      const audio = new Audio("data:audio/wav;base64," + data.audio_base64);
+      activeSlotAudio = audio;
+      activeSlotBtn = btn;
+      btn.innerHTML = '<span>⏸️</span> <span>Pause Alarm</span>';
+      btn.classList.remove('btn-purple');
+      btn.classList.add('btn-secondary');
+
+      audio.onended = () => {
+        btn.innerHTML = '<span>🔊</span> <span>Spoken Alarm (Bulbul v3)</span>';
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-purple');
+        activeSlotAudio = null;
+        activeSlotBtn = null;
+      };
+
+      await audio.play();
+    } else {
+      btn.innerHTML = '<span>🔊</span> <span>Spoken Alarm (Bulbul v3)</span>';
+      alert("Could not generate audio reminder.");
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.innerHTML = '<span>🔊</span> <span>Spoken Alarm (Bulbul v3)</span>';
+    alert("Audio error: " + err.message);
+  }
+}
+
+async function toggleAllTimetableAudio() {
+  const playBtn = document.getElementById('btn-play-all-timetable');
+  const stopBtn = document.getElementById('btn-stop-all-timetable');
+  const statusText = document.getElementById('timetable-audio-status');
+
+  // If already loaded and playing -> Pause it
+  if (allTimetableAudio && !allTimetableAudio.paused) {
+    allTimetableAudio.pause();
+    playBtn.innerHTML = '<span id="all-tt-icon">▶️</span> <span id="all-tt-text">Resume Audio</span>';
+    if (statusText) statusText.innerText = 'Audio paused. Click Resume to continue listening.';
+    return;
+  }
+
+  // If already loaded and paused -> Resume it
+  if (allTimetableAudio && allTimetableAudio.paused && allTimetableAudio.currentTime > 0) {
+    allTimetableAudio.play();
+    playBtn.innerHTML = '<span id="all-tt-icon">⏸️</span> <span id="all-tt-text">Pause Audio</span>';
+    if (statusText) statusText.innerText = '🔊 Playing daily medication schedule...';
+    return;
+  }
+
+  // Otherwise, synthesize full timetable audio
+  stopAllActiveAudio();
+
+  const tt = currentTimetableData || getStoredTimetable();
+  if (!tt) {
+    alert("Please upload or process a prescription first.");
+    return;
+  }
+
+  const profile = getStoredProfile();
+  const lang = profile.language || 'Hindi';
+  const name = tt.patient_name || profile.name || 'Patient';
+
+  // Build spoken text for the full schedule
+  let scheduleSpeech = `नमस्ते ${name} जी। यह आपका दैनिक दवाई का समय चक्र है। `;
+  if (tt.diagnosis) scheduleSpeech += `बीमारी या निदान: ${tt.diagnosis}। `;
+  if (tt.slots && tt.slots.length > 0) {
+    tt.slots.forEach(s => {
+      const medNames = (s.medicines || []).map(m => m.name + ' (' + (m.instructions || '') + ')').join(', ');
+      scheduleSpeech += `${s.name}: ${medNames}। `;
+    });
+  }
+  if (tt.doctor_notes) scheduleSpeech += `डॉक्टर की सलाह: ${tt.doctor_notes}। कृपया अपनी दवाइयाँ समय पर लें। धन्यवाद।`;
+
+  playBtn.disabled = true;
+  playBtn.innerHTML = '<span id="all-tt-icon">⏳</span> <span id="all-tt-text">Synthesizing Audio...</span>';
+  if (statusText) statusText.innerText = 'Synthesizing voice via Sarvam Bulbul v3...';
+
+  try {
+    const r = await fetch('/api/speak-reminder', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ text: scheduleSpeech, language: lang })
+    });
+    const data = await r.json();
+    playBtn.disabled = false;
+
+    if (data.audio_base64) {
+      allTimetableAudio = new Audio("data:audio/wav;base64," + data.audio_base64);
+      playBtn.innerHTML = '<span id="all-tt-icon">⏸️</span> <span id="all-tt-text">Pause Audio</span>';
+      if (stopBtn) stopBtn.style.display = 'inline-flex';
+      if (statusText) statusText.innerText = '🔊 Playing daily medication schedule...';
+
+      allTimetableAudio.onended = () => {
+        stopAllTimetableAudio();
+      };
+
+      await allTimetableAudio.play();
+    } else {
+      playBtn.innerHTML = '<span id="all-tt-icon">▶️</span> <span id="all-tt-text">Play Full Audio Schedule</span>';
+      alert("Could not generate timetable audio.");
+    }
+  } catch (err) {
+    playBtn.disabled = false;
+    playBtn.innerHTML = '<span id="all-tt-icon">▶️</span> <span id="all-tt-text">Play Full Audio Schedule</span>';
+    alert("Audio error: " + err.message);
+  }
+}
+
+function stopAllTimetableAudio() {
+  stopAllActiveAudio();
+}
+
+function playSlotVoice(speechText) {
+  toggleSlotVoice(null, speechText);
 }
 
 function playAudioBase64(base64Data) {
@@ -1189,6 +1389,9 @@ async function startCall() {
 
   const tt = getStoredTimetable();
   const medsList = tt && tt.medications_list ? tt.medications_list : [];
+  const doctorName = tt && tt.doctor_name ? tt.doctor_name : "";
+  const hospitalName = tt && tt.hospital_name ? tt.hospital_name : "";
+  const diagnosis = tt && tt.diagnosis ? tt.diagnosis : "";
 
   const res = await fetch('/api/start-call', {
     method: 'POST',
@@ -1196,7 +1399,10 @@ async function startCall() {
     body: JSON.stringify({
       patient_name: profile.name,
       language: profile.language,
-      medications: medsList
+      medications: medsList,
+      doctor_name: doctorName,
+      hospital_name: hospitalName,
+      diagnosis: diagnosis
     })
   });
   const data = await res.json();
@@ -1264,6 +1470,9 @@ async function toggleCompanionRecording() {
               patient_name: profile.name,
               language: profile.language,
               medications: tt && tt.medications_list ? tt.medications_list : [],
+              doctor_name: tt && tt.doctor_name ? tt.doctor_name : "",
+              hospital_name: tt && tt.hospital_name ? tt.hospital_name : "",
+              diagnosis: tt && tt.diagnosis ? tt.diagnosis : "",
               history: callHistory,
               audio_base64: b64
             })
@@ -1315,6 +1524,9 @@ async function sendCompanionTurn() {
       patient_name: profile.name,
       language: profile.language,
       medications: tt && tt.medications_list ? tt.medications_list : [],
+      doctor_name: tt && tt.doctor_name ? tt.doctor_name : "",
+      hospital_name: tt && tt.hospital_name ? tt.hospital_name : "",
+      diagnosis: tt && tt.diagnosis ? tt.diagnosis : "",
       history: callHistory,
       user_text: text
     })
@@ -1348,6 +1560,9 @@ async function endCall() {
       patient_name: profile.name,
       language: profile.language,
       medications: tt && tt.medications_list ? tt.medications_list : [],
+      doctor_name: tt && tt.doctor_name ? tt.doctor_name : "",
+      hospital_name: tt && tt.hospital_name ? tt.hospital_name : "",
+      diagnosis: tt && tt.diagnosis ? tt.diagnosis : "",
       history: callHistory
     })
   });
@@ -1486,12 +1701,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             p_name = req_data.get("patient_name", "Patient")
             lang = req_data.get("language", "Hindi")
             meds = req_data.get("medications", ["Prescribed Medicines"])
+            doc_name = req_data.get("doctor_name", "")
+            hosp_name = req_data.get("hospital_name", "")
+            diag = req_data.get("diagnosis", "")
 
             patient = {
                 "patient_id": f"PAT-{abs(hash(p_name)) % 100000:05d}",
                 "name": p_name,
                 "language": lang,
-                "medications": meds
+                "medications": meds,
+                "doctor_name": doc_name,
+                "hospital_name": hosp_name,
+                "diagnoses": [diag] if diag else []
             }
             history = []
             agent_text = generate_agent_reply(patient, history)
@@ -1507,12 +1728,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             p_name = req_data.get("patient_name", "Patient")
             lang = req_data.get("language", "Hindi")
             meds = req_data.get("medications", ["Prescribed Medicines"])
+            doc_name = req_data.get("doctor_name", "")
+            hosp_name = req_data.get("hospital_name", "")
+            diag = req_data.get("diagnosis", "")
 
             patient = {
                 "patient_id": f"PAT-{abs(hash(p_name)) % 100000:05d}",
                 "name": p_name,
                 "language": lang,
-                "medications": meds
+                "medications": meds,
+                "doctor_name": doc_name,
+                "hospital_name": hosp_name,
+                "diagnoses": [diag] if diag else []
             }
             history = req_data.get("history", [])
             user_text = req_data.get("user_text", "")
@@ -1532,12 +1759,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             p_name = req_data.get("patient_name", "Patient")
             lang = req_data.get("language", "Hindi")
             meds = req_data.get("medications", ["Prescribed Medicines"])
+            doc_name = req_data.get("doctor_name", "")
+            hosp_name = req_data.get("hospital_name", "")
+            diag = req_data.get("diagnosis", "")
 
             patient = {
                 "patient_id": f"PAT-{abs(hash(p_name)) % 100000:05d}",
                 "name": p_name,
                 "language": lang,
-                "medications": meds
+                "medications": meds,
+                "doctor_name": doc_name,
+                "hospital_name": hosp_name,
+                "diagnoses": [diag] if diag else []
             }
             history = req_data.get("history", [])
             audio_b64 = req_data.get("audio_base64", "")
@@ -1564,13 +1797,19 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             p_name = req_data.get("patient_name", "Patient")
             lang = req_data.get("language", "Hindi")
             meds = req_data.get("medications", ["Prescribed Medicines"])
+            doc_name = req_data.get("doctor_name", "")
+            hosp_name = req_data.get("hospital_name", "")
+            diag = req_data.get("diagnosis", "")
 
             patient = {
                 "patient_id": f"PAT-{abs(hash(p_name)) % 100000:05d}",
                 "name": p_name,
                 "language": lang,
                 "phone": "+91-98765-43210",
-                "medications": meds
+                "medications": meds,
+                "doctor_name": doc_name,
+                "hospital_name": hosp_name,
+                "diagnoses": [diag] if diag else []
             }
             history = req_data.get("history", [])
 
