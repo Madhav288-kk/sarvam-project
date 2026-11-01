@@ -17,31 +17,41 @@ BASE_DIR = Path(__file__).parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+# Ensure .env is loaded
+_env = BASE_DIR / ".env"
+if _env.exists():
+    for _line in _env.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip())
+
 from sarvamai import SarvamAI
 import json_repair
 from db.patients import save_patient, get_patient
 
 
 TIMETABLE_SYSTEM_PROMPT = """You are an expert AI Clinical Pharmacist & Medication Schedule Planner.
-Given prescription text, doctor's notes, or discharge instructions:
-1. Extract the patient name (if mentioned in prescription, use it; otherwise use the provided default name), clinical condition, and doctor notes.
-2. Group ALL prescribed medications into 4 standard daily time slots:
-   - "Morning (08:00 AM) — With Breakfast"
-   - "Afternoon (01:30 PM) — After Lunch"
-   - "Evening (06:00 PM) — With Snacks"
-   - "Night (09:00 PM) — After Dinner / Bedtime"
-3. For each medicine, provide:
-   - name: Medicine name and strength (e.g. "Tab. Paracetamol 650mg")
-   - dosage: e.g. "1 Tablet" or "5 ml syrup"
-   - instructions: Short, clear instruction in the requested language (e.g. "नाश्ते के 20 मिनट बाद, पानी के साथ")
-   - purpose: Why it is prescribed (e.g. "बुखार और दर्द के लिए")
-   - speech: Conversational, friendly spoken reminder text in the requested language that an automated voice alarm will read aloud to the patient.
-4. Output STRICT JSON only with keys:
+Given doctor prescription OCR text or clinical instructions:
+1. Extract patient_name (if mentioned, otherwise use the provided patient name), diagnosis/condition, and doctor_notes.
+2. Group ALL prescribed medications accurately into daily time slots based on their frequency:
+   - "three times a day" -> Morning, Afternoon, Night
+   - "twice a day" -> Morning, Night
+   - "at night" or "at bedtime" -> Night
+   - "once daily in morning" -> Morning
+   - "throughout the day" / "as needed" -> Morning or Daytime
+3. For each medicine in a slot, provide:
+   - name: Clean medicine name and strength (e.g. "Tab. Paracetamol 500 mg", "Syp. Cough linctus", "Tab. Cetirizine 10 mg"). Do NOT include bullet numbers.
+   - dosage: e.g. "1 Tablet" or "10 ml"
+   - instructions: Clear, short instruction in the requested language (e.g. "नाश्ते/भोजन के बाद, पानी के साथ लें")
+   - purpose: Why it is prescribed (e.g. "बुखार और गले के दर्द से राहत के लिए")
+   - speech: Conversational, friendly spoken reminder in the requested language for Bulbul v3 TTS alarm (e.g. "नमस्ते, यह आपकी दवाई लेने का समय है। कृपया भोजन के बाद एक गोली लें।")
+4. Output STRICT JSON:
    {
      "patient_name": "...",
      "diagnosis": "...",
      "doctor_notes": "...",
-     "medications_list": ["Tab. Paracetamol 650mg", "Tab. Pantocid 40mg"],
+     "medications_list": ["Tab. Paracetamol 500 mg", "Tab. Cetirizine 10 mg", "Syp. Cough linctus", "ORS sachets"],
      "slots": [
        {
          "id": "morning",
@@ -51,7 +61,22 @@ Given prescription text, doctor's notes, or discharge instructions:
          "color": "#fde047",
          "medicines": [ ... ]
        },
-       ...
+       {
+         "id": "afternoon",
+         "name": "Afternoon (01:30 PM) — After Lunch",
+         "time": "01:30 PM",
+         "icon": "☀️",
+         "color": "#60a5fa",
+         "medicines": [ ... ]
+       },
+       {
+         "id": "night",
+         "name": "Night (09:00 PM) — After Dinner / Bedtime",
+         "time": "09:00 PM",
+         "icon": "🌙",
+         "color": "#a78bfa",
+         "medicines": [ ... ]
+       }
      ]
    }
 """
@@ -72,22 +97,35 @@ def process_uploaded_file(
     temp_file.write_bytes(file_bytes)
 
     extracted_text = ""
-    # Attempt Sarvam Vision 2.1 OCR
-    if filename.lower().endswith(".pdf") and os.environ.get("SARVAM_API_KEY"):
+    is_doc = any(filename.lower().endswith(ext) for ext in [".pdf", ".jpg", ".jpeg", ".png", ".webp"])
+    
+    # Run Sarvam Vision 2.1 OCR on images and PDFs
+    if is_doc and os.environ.get("SARVAM_API_KEY"):
         try:
             from decoder.ingest import digitise
-            print(f"[timetable] Running Sarvam Vision 2.1 OCR on {filename}...")
+            print(f"[timetable] Running Sarvam Vision 2.1 OCR on document {filename}...")
             extracted_text = digitise(temp_file)
-            print(f"[timetable] Sarvam Vision OCR extracted {len(extracted_text)} characters.")
+            print(f"[timetable] Sarvam Vision OCR successfully extracted {len(extracted_text)} characters.")
         except Exception as e:
             print(f"[timetable] Sarvam Vision OCR failed: {e}", file=sys.stderr)
 
     if not extracted_text:
-        # If OCR wasn't available or text file was uploaded
-        try:
-            extracted_text = file_bytes.decode("utf-8", errors="ignore")
-        except Exception:
-            extracted_text = f"Prescription file: {filename}"
+        # Only decode if it is a plain text file, NEVER decode raw image/pdf bytes as UTF-8!
+        if not is_doc:
+            try:
+                extracted_text = file_bytes.decode("utf-8", errors="ignore")
+            except Exception:
+                extracted_text = ""
+
+    if not extracted_text or len(extracted_text.strip()) < 5:
+        return {
+            "patient_id": f"PAT-{abs(hash(patient_name)) % 100000:05d}",
+            "patient_name": patient_name,
+            "diagnosis": "Prescription Upload Warning",
+            "doctor_notes": "Could not extract text from this document. Please check image clarity or paste the text directly into the box.",
+            "medications_list": [],
+            "slots": []
+        }
 
     return parse_prescription_text(
         prescription_text=extracted_text,
@@ -109,7 +147,6 @@ def parse_prescription_text(
     """Parse raw prescription text into structured timetable JSON using Sarvam-105B."""
     api_key = os.environ.get("SARVAM_API_KEY", "")
     
-    # Check if we have Sarvam API key
     if api_key and len(prescription_text.strip()) > 5:
         try:
             client = SarvamAI(api_subscription_key=api_key)
@@ -118,11 +155,11 @@ Language for instructions and voice speech: {language}
 Default Patient Name: {patient_name}
 Age: {age}, Gender: {gender}
 
-Prescription Details to parse:
+Prescription Details:
 {prescription_text}
 """
             resp = client.chat.completions(
-                model="sarvam-105b",
+                model="sarvam-105b-conversations",
                 messages=[
                     {"role": "system", "content": TIMETABLE_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt}
@@ -133,7 +170,6 @@ Prescription Details to parse:
             raw = resp.choices[0].message.content
             parsed = json_repair.loads(raw)
             if isinstance(parsed, dict) and "slots" in parsed:
-                # Update DB with this active patient
                 final_name = parsed.get("patient_name") or patient_name
                 med_list = parsed.get("medications_list", [])
                 if not med_list:
@@ -160,7 +196,6 @@ Prescription Details to parse:
         except Exception as e:
             print(f"[timetable] Error calling Sarvam-105B: {e}", file=sys.stderr)
 
-    # Robust local parser fallback
     return _build_fallback_timetable(prescription_text, language, patient_name, age, gender)
 
 
@@ -171,11 +206,14 @@ def _build_fallback_timetable(
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     meds = []
     for l in lines:
-        if any(w in l.lower() for w in ["tab", "cap", "syp", "inj", "mg", "ml", "tablet", "capsule", "drop"]):
-            meds.append(l)
+        cleaned = l.lstrip("0123456789.-) ")
+        if any(w in cleaned.lower() for w in ["tab", "cap", "syp", "inj", "mg", "ml", "tablet", "capsule", "drop", "ors", "sachet"]):
+            # Filter out binary garbage lines
+            if not any(bad in cleaned.lower() for bad in ["desc", "cprt", "rxyz", "gxyz", "bxyz", "rtrc"]):
+                meds.append(cleaned)
     
     if not meds:
-        meds = ["Tab. Paracetamol 650mg", "Tab. Pantocid 40mg", "Cap. Vitamin C 500mg"]
+        meds = ["Tab. Paracetamol 500mg", "Tab. Cetirizine 10mg", "Syp. Cough Linctus"]
 
     slots = [
         {
@@ -187,7 +225,7 @@ def _build_fallback_timetable(
             "medicines": [
                 {
                     "name": meds[0],
-                    "dosage": "1 Tablet",
+                    "dosage": "1 Tablet / Dose",
                     "instructions": "नाश्ते के 20 मिनट बाद, पानी के साथ लें",
                     "purpose": "उपचार एवं स्वास्थ्य लाभ के लिए",
                     "speech": f"नमस्ते {name}, यह आपकी सुबह की {meds[0]} लेने का समय है। कृपया नाश्ते के बाद एक खुराक लें।"
@@ -202,8 +240,8 @@ def _build_fallback_timetable(
             "color": "#60a5fa",
             "medicines": [
                 {
-                    "name": meds[1] if len(meds) > 1 else "Cap. Vitamin D3",
-                    "dosage": "1 Tablet / Capsule",
+                    "name": meds[1] if len(meds) > 1 else meds[0],
+                    "dosage": "1 Dose",
                     "instructions": "दोपहर के खाने के बाद पानी के साथ लें",
                     "purpose": "शरीर की ताकत और रिकवरी के लिए",
                     "speech": f"नमस्ते {name}, दोपहर की दवाई का समय हो गया है। कृपया भोजन के बाद दवाई लें।"

@@ -33,14 +33,23 @@ def _headers():
 
 # ── DIGITISE ─────────────────────────────────────────────────────────────────
 
-def digitise(pdf_path: Path) -> str:
-    """Full-page text extraction — returns markdown string."""
-    print(f"[ingest] Submitting digitise job: {pdf_path.name} ...")
-    with open(pdf_path, "rb") as f:
+def digitise(file_path: Path) -> str:
+    """Full-page text extraction — supports PDF, JPG, PNG, WEBP — returns markdown string."""
+    print(f"[ingest] Submitting digitise job: {file_path.name} ...")
+    ext = file_path.suffix.lower()
+    mime = "application/pdf"
+    if ext in [".jpg", ".jpeg"]:
+        mime = "image/jpeg"
+    elif ext == ".png":
+        mime = "image/png"
+    elif ext == ".webp":
+        mime = "image/webp"
+
+    with open(file_path, "rb") as f:
         resp = requests.post(
             f"{API_BASE}/doc-ai/v1/job/digitise",
             headers=_headers(),
-            files={"file": (pdf_path.name, f, "application/pdf")},
+            files={"file": (file_path.name, f, mime)},
             data={"language": "en-IN", "output_format": "md", "content_type": "printed"},
             timeout=60,
         )
