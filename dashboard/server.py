@@ -19,7 +19,7 @@ import urllib.parse
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
+PORT = int(os.environ.get("PORT", sys.argv[1] if len(sys.argv) > 1 else 8080))
 BASE_DIR = Path(__file__).parent.parent
 MOCK_DIR = BASE_DIR / "mock"
 DB_PATH = MOCK_DIR / "patients.db"
@@ -1287,12 +1287,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
 
 def start():
-    server = HTTPServer(("127.0.0.1", PORT), DashboardHandler)
-    print(f"\n[dashboard] Care Coordinator Interactive Dashboard running at: http://localhost:{PORT}")
+    server = HTTPServer(("0.0.0.0", PORT), DashboardHandler)
+    print(f"\n[dashboard] Care Coordinator Interactive Dashboard running on port {PORT}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n[dashboard] Shutting down.")
+        print("\n[dashboard] Shutting down.", flush=True)
 
 
 if __name__ == "__main__":
