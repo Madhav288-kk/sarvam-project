@@ -312,6 +312,11 @@ HTML_CONTENT = """<!DOCTYPE html>
       100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
     }
 
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
     .chip {
       background: rgba(255,255,255,0.05);
       border: 1px solid var(--border);
@@ -611,11 +616,14 @@ HTML_CONTENT = """<!DOCTYPE html>
         Tell the AI what you are feeling. It will formulate a <strong>differential diagnosis, triage level, and safe low-risk pain relief guidance</strong> tailored to your age and gender.
       </p>
 
-      <!-- Language Disclaimer Notice -->
-      <div style="background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.35); padding: 9px 14px; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
-        <span style="font-size: 20px;">🌐</span>
-        <div style="font-size: 12.5px; color: #93c5fd; line-height: 1.45;">
-          <strong>Language Disclaimer:</strong> Your clinical diagnostic assessment, safe pain relief guidance, and doctor audio will always be given strictly in your selected language (<strong id="diag-selected-lang-notice" style="color: #60a5fa; text-decoration: underline;">Hindi</strong>), regardless of what language you type or speak your symptoms in. <em>(You can change your preferred language in the patient details above anytime).</em>
+      <!-- Language & Audio Disclaimer Notice -->
+      <div style="background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.35); padding: 11px 14px; border-radius: 8px; margin-bottom: 14px; display: flex; align-items: flex-start; gap: 10px;">
+        <span style="font-size: 22px; line-height: 1.2;">🌐</span>
+        <div style="font-size: 12.5px; color: #93c5fd; line-height: 1.5;">
+          <div><strong>Language & Voice Disclaimer:</strong> Your clinical diagnostic assessment, safe pain relief guidance, and doctor audio will always be given strictly in your selected language (<strong id="diag-selected-lang-notice" style="color: #60a5fa; text-decoration: underline;">Hindi</strong>), regardless of what language you type or speak your symptoms in.</div>
+          <div style="margin-top: 6px; color: #cbd5e1; font-size: 12px; border-top: 1px dashed rgba(147, 197, 253, 0.3); padding-top: 6px;">
+            📢 <strong>How to listen to the response in a different language:</strong> If you wish to hear Dr. AI's response in another language, simply change your preferred language in the <strong>Patient Details</strong> section above and <strong>refresh the page (press F5 or browser reload)</strong>. Next time, the clinical consultation and spoken doctor audio will automatically update and play in your newly chosen language.
+          </div>
         </div>
       </div>
 
@@ -762,6 +770,9 @@ HTML_CONTENT = """<!DOCTYPE html>
             <button class="btn btn-secondary" id="btn-stop-all-timetable" style="padding: 7px 12px; font-size: 12px; display:none;" onclick="stopAllTimetableAudio()">
               ⏹️ Stop
             </button>
+          </div>
+          <div style="width: 100%; margin-top: 4px; padding-top: 8px; border-top: 1px dashed rgba(124, 58, 237, 0.3); font-size: 11.5px; color: #c4b5fd;">
+            📢 <strong>How to listen in a different language:</strong> Change your preferred language in <strong>Patient Details</strong> above and <strong>refresh the page (press F5 or reload)</strong>. Next time you click Play, the medication schedule audio will play in your new language.
           </div>
         </div>
         
@@ -985,7 +996,8 @@ function initPatientsStore() {
       prescriptions: Array.isArray(legacyPrescriptions) ? legacyPrescriptions : [],
       active_rx_id: legacyRxId || (legacyPrescriptions[0] ? legacyPrescriptions[0].id : null),
       interaction_history: [],
-      diagnoses_history: []
+      diagnoses_history: [],
+      active_diagnosis: null
     };
     patients = [firstPatient];
     localStorage.setItem('sarvam_patients_list', JSON.stringify(patients));
@@ -1024,7 +1036,8 @@ function getActivePatient() {
     prescriptions: [],
     active_rx_id: null,
     interaction_history: [],
-    diagnoses_history: []
+    diagnoses_history: [],
+    active_diagnosis: null
   };
 }
 
@@ -1052,7 +1065,8 @@ function createNewPatient() {
     prescriptions: [],
     active_rx_id: null,
     interaction_history: [],
-    diagnoses_history: []
+    diagnoses_history: [],
+    active_diagnosis: null
   };
   list.push(newPatient);
   saveAllPatients(list);
@@ -1081,7 +1095,8 @@ function deleteActivePatient() {
       prescriptions: [],
       active_rx_id: null,
       interaction_history: [],
-      diagnoses_history: []
+      diagnoses_history: [],
+      active_diagnosis: null
     };
     list = [fresh];
   }
@@ -1122,6 +1137,26 @@ function switchActivePatient(patientId) {
   updatePrescriptionUI();
   renderPatientTalksUI();
   renderPatientDiagnosesUI();
+
+  // Restore or hide active consultation for this patient
+  const actDiag = patient.active_diagnosis;
+  const resContainer = document.getElementById('diag-result-container');
+  const inputCard = document.getElementById('diag-input-card');
+  if (actDiag && actDiag.assessment) {
+    const curLang = (patient.language || 'Hindi').trim().toLowerCase();
+    const prevLang = (actDiag.language || '').trim().toLowerCase();
+    if (prevLang && curLang !== prevLang) {
+      reloadDiagnosisInNewLanguage(actDiag.symptoms || '', patient.language || 'Hindi');
+    } else {
+      renderDiagnosis(actDiag.assessment);
+    }
+  } else {
+    if (resContainer) {
+      resContainer.style.display = 'none';
+      resContainer.innerHTML = '';
+    }
+    if (inputCard) inputCard.style.display = 'block';
+  }
 }
 
 function updatePatientPillsUI() {
@@ -1445,6 +1480,45 @@ function renderPatientTalksUI() {
 }
 
 // ── TAB 1: PREVIOUS DIAGNOSES HISTORY METHODS ──────────────────────────────
+function getActivePatientDiagnosis() {
+  const patient = getActivePatient();
+  return patient.active_diagnosis || null;
+}
+
+function saveActivePatientDiagnosis(diag) {
+  const patient = getActivePatient();
+  patient.active_diagnosis = diag;
+  saveActivePatient(patient);
+}
+
+function clearActivePatientDiagnosis() {
+  const patient = getActivePatient();
+  delete patient.active_diagnosis;
+  saveActivePatient(patient);
+}
+
+function loadSavedDiagnosis(diagId) {
+  const diags = getActivePatientDiagnoses();
+  const found = diags.find(d => d.id === diagId);
+  if (found && found.assessment) {
+    const curLang = (getStoredProfile().language || 'Hindi').trim().toLowerCase();
+    const diagLang = (found.language || found.assessment.language || '').trim().toLowerCase();
+    saveActivePatientDiagnosis({
+      id: found.id,
+      symptoms: found.symptoms || '',
+      language: found.language || getStoredProfile().language || 'Hindi',
+      assessment: found.assessment
+    });
+    if (diagLang && curLang !== diagLang) {
+      reloadDiagnosisInNewLanguage(found.symptoms || '', getStoredProfile().language || 'Hindi');
+    } else {
+      renderDiagnosis(found.assessment);
+    }
+    const container = document.getElementById('diag-result-container');
+    if (container) container.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
 function getActivePatientDiagnoses() {
   const patient = getActivePatient();
   return Array.isArray(patient.diagnoses_history) ? patient.diagnoses_history : [];
@@ -1521,9 +1595,14 @@ function renderPatientDiagnosesUI() {
             <span style="font-size: 11.5px; color: #94a3b8;">🕒 ${escapeHtml(diag.timestamp || '')}</span>
             ${triageBadge}
           </div>
-          <button class="btn btn-secondary" onclick="deleteDiagnosisFromActivePatient('${diag.id}')" style="padding: 2px 8px; font-size: 10.5px; color: #f87171;">
-            🗑️ Delete
-          </button>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <button class="btn btn-secondary" onclick="loadSavedDiagnosis('${diag.id}')" style="padding: 2px 8px; font-size: 10.5px; color: #93c5fd;">
+              👁️ View Consultation
+            </button>
+            <button class="btn btn-secondary" onclick="deleteDiagnosisFromActivePatient('${diag.id}')" style="padding: 2px 8px; font-size: 10.5px; color: #f87171;">
+              🗑️ Delete
+            </button>
+          </div>
         </div>
         <div style="font-size: 12px; color: #e2e8f0; margin-bottom: 4px;">
           <strong>Symptoms:</strong> ${escapeHtml(diag.symptoms || '')}
@@ -1701,7 +1780,114 @@ window.addEventListener('DOMContentLoaded', () => {
   if (typeof initCallAutoplayToggle === 'function') {
     initCallAutoplayToggle();
   }
+
+  // Restore active consultation if present (or reload in new language if language was changed)
+  const actDiag = getActivePatientDiagnosis();
+  if (actDiag && (actDiag.assessment || actDiag.symptoms)) {
+    const curLang = (profile.language || 'Hindi').trim().toLowerCase();
+    const prevLang = (actDiag.language || '').trim().toLowerCase();
+    if (prevLang && curLang !== prevLang) {
+      reloadDiagnosisInNewLanguage(actDiag.symptoms || '', profile.language || 'Hindi');
+    } else if (actDiag.assessment) {
+      renderDiagnosis(actDiag.assessment);
+    }
+  }
 });
+
+async function reloadDiagnosisInNewLanguage(symptoms, newLang) {
+  const container = document.getElementById('diag-result-container');
+  if (!container) return;
+  container.style.display = 'block';
+
+  const initialCard = document.getElementById('diag-input-card');
+  if (initialCard) initialCard.style.display = 'none';
+
+  container.innerHTML = `
+    <div class="card" style="border: 1px solid #3b82f6; text-align: center; padding: 36px 20px;">
+      <div style="font-size: 34px; margin-bottom: 12px; display:inline-block; animation: spin 1.5s linear infinite;">🔄</div>
+      <h3 style="color: #93c5fd; font-size: 18px; margin-bottom: 8px;">
+        Updating Consultation & Doctor Audio to ${escapeHtml(newLang)}...
+      </h3>
+      <p style="color: #cbd5e1; font-size: 13px; max-width: 520px; margin: 0 auto 16px auto; line-height: 1.5;">
+        You updated your preferred language and refreshed the page. Dr. AI (Sarvam-105B & Bulbul v3) is formulating your clinical diagnosis, triage level, safe pain relief guidance, and doctor audio in <strong>${escapeHtml(newLang)}</strong>.
+      </p>
+      <div style="color: #60a5fa; font-size: 12.5px; font-style: italic;">
+        ⏳ Formulating diagnosis and synthesizing audio in ${escapeHtml(newLang)}...
+      </div>
+    </div>
+  `;
+
+  try {
+    const profile = getStoredProfile();
+    const res = await fetch('/api/diagnose', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        symptoms: symptoms,
+        language: newLang,
+        patient_name: profile.name,
+        age: profile.age,
+        gender: profile.gender
+      })
+    });
+    const data = await res.json();
+    if (data.assessment) {
+      saveActivePatientDiagnosis({
+        id: 'diag_' + Date.now(),
+        symptoms: symptoms,
+        language: newLang,
+        assessment: data.assessment
+      });
+      renderDiagnosis(data.assessment);
+    } else {
+      throw new Error("No assessment returned");
+    }
+  } catch (err) {
+    console.error("Error reloading diagnosis in new language:", err);
+    const prev = getActivePatientDiagnosis();
+    if (prev && prev.assessment) {
+      renderDiagnosis(prev.assessment);
+    }
+  }
+}
+
+function checkLanguageChangeNotice() {
+  const activeDiag = getActivePatientDiagnosis();
+  const refreshBanner = document.getElementById('diag-lang-refresh-banner');
+  if (!activeDiag) {
+    if (refreshBanner) refreshBanner.remove();
+    return;
+  }
+  const currentLang = (getStoredProfile().language || 'Hindi').trim();
+  const prevLang = (activeDiag.language || '').trim();
+
+  const container = document.getElementById('diag-result-container');
+  if (!container || container.style.display === 'none') return;
+
+  if (prevLang && currentLang.toLowerCase() !== prevLang.toLowerCase()) {
+    if (!refreshBanner) {
+      const banner = document.createElement('div');
+      banner.id = 'diag-lang-refresh-banner';
+      banner.style.cssText = 'background: rgba(245, 158, 11, 0.2); border: 1px solid #f59e0b; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;';
+      banner.innerHTML = `
+        <div style="font-size: 12.5px; color: #fef08a; line-height: 1.4;">
+          🔄 <strong>Language preference changed to ${escapeHtml(currentLang)}!</strong> To play Dr. AI's response in ${escapeHtml(currentLang)}, please <strong>refresh the page</strong> (press F5 or click Refresh).
+        </div>
+        <button class="btn btn-purple" onclick="location.reload()" style="padding: 5px 12px; font-size: 12px; font-weight: 600; white-space: nowrap;">
+          🔄 Refresh Page Now
+        </button>
+      `;
+      const card = container.querySelector('.card');
+      if (card) card.insertBefore(banner, card.children[1] || card.firstChild);
+    } else {
+      refreshBanner.style.display = 'flex';
+      const textDiv = refreshBanner.querySelector('div');
+      if (textDiv) textDiv.innerHTML = `🔄 <strong>Language preference changed to ${escapeHtml(currentLang)}!</strong> To play Dr. AI's response in ${escapeHtml(currentLang)}, please <strong>refresh the page</strong> (press F5 or click Refresh).`;
+    }
+  } else {
+    if (refreshBanner) refreshBanner.remove();
+  }
+}
 
 function onProfileInputChanged() {
   const name = document.getElementById('patient-name-input').value.trim();
@@ -1713,6 +1899,7 @@ function onProfileInputChanged() {
   saveStoredProfile(profile);
   updateProfileBadge();
   updatePatientPillsUI();
+  checkLanguageChangeNotice();
 
   // Also update backend session
   if (name && age && gender) {
@@ -1858,6 +2045,12 @@ async function toggleDiagMic() {
             document.getElementById('diag-input').value = data.user_transcript;
           }
           if (data.assessment) {
+            saveActivePatientDiagnosis({
+              id: 'diag_' + Date.now(),
+              symptoms: data.user_transcript || 'Voice symptoms reported',
+              language: profile.language,
+              assessment: data.assessment
+            });
             renderDiagnosis(data.assessment);
             addDiagnosisToActivePatient({
               id: 'diag_' + Date.now(),
@@ -1923,6 +2116,12 @@ async function runDiagnosis() {
     btn.innerText = '🔍 Analyze Symptoms & Suggest Safe Relief';
 
     if (data.assessment) {
+      saveActivePatientDiagnosis({
+        id: 'diag_' + Date.now(),
+        symptoms: text,
+        language: profile.language,
+        assessment: data.assessment
+      });
       renderDiagnosis(data.assessment);
       addDiagnosisToActivePatient({
         id: 'diag_' + Date.now(),
@@ -1948,6 +2147,7 @@ async function runDiagnosis() {
 // ── TAB 1: DIAGNOSIS RESULT & AUDIO CONTROLLER ────────────────────────────
 diagAudioInstance = null;
 currentDiagAudioB64 = null;
+currentDiagAudioLang = null;
 currentDiagSpokenText = "";
 
 function renderDiagnosis(data) {
@@ -1955,6 +2155,7 @@ function renderDiagnosis(data) {
   container.style.display = 'block';
 
   currentDiagAudioB64 = data.audio_base64 || null;
+  currentDiagAudioLang = (getStoredProfile().language || 'Hindi').trim();
   currentDiagSpokenText = data.spoken_explanation || data.patient_summary || '';
 
   let triageClass = 'routine';
@@ -2047,8 +2248,16 @@ function renderDiagnosis(data) {
       </div>
 
       <!-- Selected Language Delivery Banner -->
-      <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); padding: 8px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 12.5px; color: #a7f3d0; display:flex; align-items:center; gap:8px;">
+      <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); padding: 8px 14px; border-radius: 8px; margin-bottom: 10px; font-size: 12.5px; color: #a7f3d0; display:flex; align-items:center; gap:8px;">
         <span>🌐</span> <span>Clinical diagnosis, triage, and safe pain relief delivered strictly in your selected language: <strong style="color:#fff;">${escapeHtml((getStoredProfile().language || 'Hindi'))}</strong></span>
+      </div>
+
+      <!-- Language Change & Refresh Disclaimer Notice -->
+      <div style="background: rgba(139, 92, 246, 0.12); border: 1px solid rgba(139, 92, 246, 0.35); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; color: #ddd6fe; display:flex; align-items:flex-start; gap:10px;">
+        <span style="font-size: 18px; line-height: 1;">📢</span>
+        <div style="line-height: 1.45;">
+          <strong>How to listen to this response in a different language:</strong> If you want to hear Dr. AI's response in another language (e.g. Sindhi, Marathi, Gujarati, English, etc.), simply change your preferred language in <strong>Patient Details</strong> above and <strong>refresh the page (press F5 or browser reload)</strong>. Next time, the clinical consultation and spoken doctor audio will automatically update and play in your newly chosen language!
+        </div>
       </div>
 
       <!-- ════════════════════════════════════════════════════════════════ -->
@@ -2194,6 +2403,18 @@ function updateDiagButtons(state) {
 }
 
 function toggleDiagAudio() {
+  const profile = getStoredProfile();
+  const currentLang = (profile.language || 'Hindi').trim();
+  const audioLang = (currentDiagAudioLang || currentLang).trim();
+
+  // If user changed language in patient details and hasn't refreshed yet:
+  if (audioLang.toLowerCase() !== currentLang.toLowerCase()) {
+    if (confirm(`You changed your preferred language to ${currentLang}, but this consultation audio is in ${audioLang}.\\n\\nWould you like to refresh the page now to play the response in ${currentLang}?`)) {
+      location.reload();
+      return;
+    }
+  }
+
   // If audio is already active -> toggle pause / play
   if (diagAudioInstance) {
     if (!diagAudioInstance.paused) {
@@ -2293,7 +2514,12 @@ function stopDiagAudio() {
 function resetDiagConsultation() {
   stopDiagAudio();
   if (typeof stopAllActiveAudio === 'function') stopAllActiveAudio();
-  document.getElementById('diag-result-container').style.display = 'none';
+  clearActivePatientDiagnosis();
+  const resContainer = document.getElementById('diag-result-container');
+  if (resContainer) {
+    resContainer.style.display = 'none';
+    resContainer.innerHTML = '';
+  }
   const inputCard = document.getElementById('diag-input-card');
   if (inputCard) inputCard.style.display = 'block';
   const inp = document.getElementById('diag-input');
@@ -2892,8 +3118,10 @@ async function toggleAllTimetableAudio() {
   const name = tt.patient_name || profile.name || 'Patient';
 
   // Build spoken text for the full schedule purely in the selected language (no mixed Hindi/English)
+  const ttLang = (tt.language || '').toLowerCase().trim();
+  const curLang = (lang || 'Hindi').toLowerCase().trim();
   let scheduleSpeech = "";
-  if (tt.full_schedule_speech && tt.full_schedule_speech.trim()) {
+  if (tt.full_schedule_speech && tt.full_schedule_speech.trim() && (!ttLang || ttLang === curLang)) {
     scheduleSpeech = tt.full_schedule_speech.trim();
   } else {
     // Pure target language narration using individual medicine speech snippets (which are 100% in target language)
