@@ -772,6 +772,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             <span class="badge" style="color:#60a5fa;" id="tab3-patient-id">PATIENT</span>
           </div>
           <div class="meta-row"><span class="meta-label">Demographics</span><span class="meta-value" id="tab3-patient-demo">Awaiting Input</span></div>
+          <div class="meta-row"><span class="meta-label">Language</span><span class="meta-value" id="tab3-patient-lang" style="color:#60a5fa;">Hindi</span></div>
           <div class="meta-row"><span class="meta-label">Clinic / Hospital</span><span class="meta-value" id="tab3-hospital" style="color:#a5b4fc;">Awaiting Prescription Upload</span></div>
           <div class="meta-row"><span class="meta-label">Treating Doctor</span><span class="meta-value" id="tab3-doctor" style="color:#a5b4fc;">Awaiting Prescription Upload</span></div>
           <div class="meta-row"><span class="meta-label">Diagnosis</span><span class="meta-value" id="tab3-diagnosis" style="color:#fbbf24;">Awaiting Prescription Upload</span></div>
@@ -1117,45 +1118,57 @@ function updateProfileBadge() {
   const gender = document.getElementById('patient-gender-input').value;
   const lang = document.getElementById('patient-lang-input').value;
   const badge = document.getElementById('profile-status-badge');
+  const tab3Name = document.getElementById('tab3-patient-name');
+  const tab3Demo = document.getElementById('tab3-patient-demo');
+  const tab3Lang = document.getElementById('tab3-patient-lang');
+  const confirmChip = document.getElementById('preset-reply-confirm');
 
   if (name && age && gender) {
-    badge.className = 'badge active';
-    badge.style.background = 'rgba(16, 185, 129, 0.2)';
-    badge.style.color = '#34d399';
-    badge.style.borderColor = 'rgba(16, 185, 129, 0.4)';
-    badge.innerText = `✅ Active: ${name} (${age} Y / ${gender})`;
+    if (badge) {
+      badge.className = 'badge active';
+      badge.style.background = 'rgba(16, 185, 129, 0.2)';
+      badge.style.color = '#34d399';
+      badge.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+      badge.innerText = `✅ Active: ${name} (${age} Y / ${gender})`;
+    }
 
-    document.getElementById('tab3-patient-name').innerText = name;
-    document.getElementById('tab3-patient-demo').innerText = `${age} Y / ${gender}`;
-    document.getElementById('tab3-patient-lang').innerText = lang;
+    if (tab3Name) tab3Name.innerText = name;
+    if (tab3Demo) tab3Demo.innerText = `${age} Y / ${gender}`;
+    if (tab3Lang) tab3Lang.innerText = lang;
 
-    const confirmChip = document.getElementById('preset-reply-confirm');
     if (confirmChip) confirmChip.innerText = `1. हाँ जी, मैं ${name} ही बात कर रहा हूँ।`;
   } else {
-    badge.className = 'badge';
-    badge.style.background = 'rgba(245, 158, 11, 0.2)';
-    badge.style.color = '#fbbf24';
-    badge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
-    badge.innerText = '⚠️ Please Enter Name, Age & Gender Above';
+    if (badge) {
+      badge.className = 'badge';
+      badge.style.background = 'rgba(245, 158, 11, 0.2)';
+      badge.style.color = '#fbbf24';
+      badge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+      badge.innerText = '💡 Optional: You can customize your Name, Age & Gender above';
+    }
 
-    document.getElementById('tab3-patient-name').innerText = name || 'Awaiting Name Input';
-    document.getElementById('tab3-patient-demo').innerText = (age && gender) ? `${age} Y / ${gender}` : 'Awaiting Input';
+    if (tab3Name) tab3Name.innerText = name || 'Patient';
+    if (tab3Demo) tab3Demo.innerText = (age && gender) ? `${age} Y / ${gender}` : '25 Y / Other';
+    if (tab3Lang) tab3Lang.innerText = lang || 'Hindi';
   }
 }
 
 function requireProfileValidation() {
-  const name = document.getElementById('patient-name-input').value.trim();
-  const age = document.getElementById('patient-age-input').value.trim();
-  const gender = document.getElementById('patient-gender-input').value;
+  const nameEl = document.getElementById('patient-name-input');
+  const ageEl = document.getElementById('patient-age-input');
+  const genderEl = document.getElementById('patient-gender-input');
+  const langEl = document.getElementById('patient-lang-input');
 
-  if (!name || !age || !gender) {
-    alert("⚠️ Please fill in your Full Name, Age, and Gender in the Patient Details form at the top first!");
-    const nameInput = document.getElementById('patient-name-input');
-    nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    nameInput.focus();
-    return null;
-  }
-  return { name, age, gender, language: document.getElementById('patient-lang-input').value };
+  let name = nameEl ? nameEl.value.trim() : '';
+  let age = ageEl ? ageEl.value.trim() : '';
+  let gender = genderEl ? genderEl.value : '';
+  let lang = langEl ? langEl.value : 'Hindi';
+
+  // Safe defaults if empty so user is NEVER blocked from analyzing symptoms!
+  if (!name) name = 'Patient';
+  if (!age) age = '25';
+  if (!gender) gender = 'Other';
+
+  return { name, age, gender, language: lang };
 }
 
 // ── TAB SWITCHING ──────────────────────────────────────────────────────────
