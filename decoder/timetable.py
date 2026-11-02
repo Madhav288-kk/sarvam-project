@@ -50,7 +50,7 @@ Given doctor prescription OCR text or clinical instructions:
    - dosage: e.g. "1 Tablet" or "10 ml"
    - instructions: Clear, short instruction in the requested language (e.g. "नाश्ते/भोजन के बाद, पानी के साथ लें")
    - purpose: Why it is prescribed (e.g. "बुखार और गले के दर्द से राहत के लिए")
-   - speech: Conversational, friendly spoken reminder in the requested language for Bulbul v3 TTS alarm (e.g. "नमस्ते, यह आपकी दवाई लेने का समय है। कृपया भोजन के बाद एक गोली लें।")
+   - speech: Conversational, friendly spoken reminder in the requested language for Bulbul v3 TTS alarm. NOTE: For languages with Perso-Arabic scripts (Sindhi, Kashmiri, Urdu), write the 'speech' string in Devanagari script (e.g. for Sindhi: "सुबह जो नाश्तो करण खां पोइ हिक गोरी वठो") so that Indian speech synthesis engines pronounce the native words without script errors.
 4. Output STRICT JSON:
    {
      "hospital_name": "...",

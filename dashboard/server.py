@@ -1219,17 +1219,25 @@ function toggleDiagAudio() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ text: currentDiagSpokenText, language: lang })
     })
-    .then(r => r.json())
+    .then(r => r.ok ? r.json() : { audio_base64: "" })
     .then(resData => {
+      if (btn) btn.disabled = false;
       if (resData.audio_base64) {
         currentDiagAudioB64 = resData.audio_base64;
         startDiagAudioPlayback(resData.audio_base64);
       } else {
-        alert("Could not generate audio diagnosis.");
+        updateDiagButtons('playing');
+        playBrowserSpeech(currentDiagSpokenText, lang, () => {
+          stopDiagAudio();
+        });
       }
     })
     .catch(err => {
-      alert("Audio error: " + err.message);
+      if (btn) btn.disabled = false;
+      updateDiagButtons('playing');
+      playBrowserSpeech(currentDiagSpokenText, lang, () => {
+        stopDiagAudio();
+      });
     });
   }
 }
@@ -1707,6 +1715,35 @@ function stopAllActiveAudio() {
   }
 }
 
+function playBrowserSpeech(text, lang, onEnd) {
+  if (!('speechSynthesis' in window) || !text) {
+    if (onEnd) onEnd();
+    return false;
+  }
+  try {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    const codeMap = {
+      'sindhi': 'sd', 'urdu': 'ur', 'hindi': 'hi-IN', 'bengali': 'bn-IN',
+      'telugu': 'te-IN', 'tamil': 'ta-IN', 'marathi': 'mr-IN', 'gujarati': 'gu-IN',
+      'kannada': 'kn-IN', 'malayalam': 'ml-IN', 'punjabi': 'pa-IN', 'odia': 'or',
+      'assamese': 'as', 'nepali': 'ne', 'kashmiri': 'ks', 'sanskrit': 'sa',
+      'maithili': 'mai', 'konkani': 'kok', 'dogri': 'doi', 'english': 'en-IN'
+    };
+    utter.lang = codeMap[(lang || 'hindi').toLowerCase()] || 'hi-IN';
+    utter.rate = 0.95;
+    if (onEnd) {
+      utter.onend = onEnd;
+      utter.onerror = onEnd;
+    }
+    window.speechSynthesis.speak(utter);
+    return true;
+  } catch (e) {
+    if (onEnd) onEnd();
+    return false;
+  }
+}
+
 async function toggleSlotVoice(btn, speechText) {
   // If clicking on already active slot audio -> toggle pause / play
   if (activeSlotAudio && activeSlotBtn === btn) {
@@ -1741,7 +1778,7 @@ async function toggleSlotVoice(btn, speechText) {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ text: speechText, language: lang })
     });
-    const data = await r.json();
+    const data = r.ok ? await r.json() : { audio_base64: "" };
     btn.disabled = false;
 
     if (data.audio_base64) {
@@ -1762,13 +1799,27 @@ async function toggleSlotVoice(btn, speechText) {
 
       await audio.play();
     } else {
-      btn.innerHTML = '<span>🔊</span> <span>Spoken Alarm (Bulbul v3)</span>';
-      alert("Could not generate audio reminder.");
+      // Browser SpeechSynthesis fallback for any language/script
+      btn.innerHTML = '<span>⏸️</span> <span>Playing Alarm...</span>';
+      btn.classList.remove('btn-purple');
+      btn.classList.add('btn-secondary');
+      activeSlotBtn = btn;
+      playBrowserSpeech(speechText, lang, () => {
+        btn.innerHTML = '<span>🔊</span> <span>Spoken Alarm (Bulbul v3)</span>';
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-purple');
+        activeSlotBtn = null;
+      });
     }
   } catch (err) {
     btn.disabled = false;
-    btn.innerHTML = '<span>🔊</span> <span>Spoken Alarm (Bulbul v3)</span>';
-    alert("Audio error: " + err.message);
+    // Browser SpeechSynthesis fallback if fetch had network issue
+    btn.innerHTML = '<span>⏸️</span> <span>Playing Alarm...</span>';
+    activeSlotBtn = btn;
+    playBrowserSpeech(speechText, lang, () => {
+      btn.innerHTML = '<span>🔊</span> <span>Spoken Alarm (Bulbul v3)</span>';
+      activeSlotBtn = null;
+    });
   }
 }
 
@@ -1827,7 +1878,7 @@ async function toggleAllTimetableAudio() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ text: scheduleSpeech, language: lang })
     });
-    const data = await r.json();
+    const data = r.ok ? await r.json() : { audio_base64: "" };
     playBtn.disabled = false;
 
     if (data.audio_base64) {
@@ -1842,13 +1893,22 @@ async function toggleAllTimetableAudio() {
 
       await allTimetableAudio.play();
     } else {
-      playBtn.innerHTML = '<span id="all-tt-icon">▶️</span> <span id="all-tt-text">Play Full Audio Schedule</span>';
-      alert("Could not generate timetable audio.");
+      // Browser SpeechSynthesis fallback for all languages
+      playBtn.innerHTML = '<span id="all-tt-icon">⏸️</span> <span id="all-tt-text">Playing Schedule...</span>';
+      if (stopBtn) stopBtn.style.display = 'inline-flex';
+      if (statusText) statusText.innerText = '🔊 Playing daily medication schedule...';
+
+      playBrowserSpeech(scheduleSpeech, lang, () => {
+        stopAllTimetableAudio();
+      });
     }
   } catch (err) {
     playBtn.disabled = false;
-    playBtn.innerHTML = '<span id="all-tt-icon">▶️</span> <span id="all-tt-text">Play Full Audio Schedule</span>';
-    alert("Audio error: " + err.message);
+    playBtn.innerHTML = '<span id="all-tt-icon">⏸️</span> <span id="all-tt-text">Playing Schedule...</span>';
+    if (stopBtn) stopBtn.style.display = 'inline-flex';
+    playBrowserSpeech(scheduleSpeech, lang, () => {
+      stopAllTimetableAudio();
+    });
   }
 }
 
@@ -2167,11 +2227,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         # ── ENDPOINT: SPEAK REMINDER (BULBUL V3) ────────────────────────────
         if self.path == "/api/speak-reminder":
-            text = req_data.get("text", "दवाई का समय हो गया है।")
-            lang = req_data.get("language", "Hindi")
-            audio_bytes = speak_turn(text, language=lang, speaker="ritu", pace=0.92)
-            b64 = base64.b64encode(audio_bytes).decode("utf-8")
-            self._send_json({"audio_base64": b64})
+            try:
+                text = req_data.get("text", "दवाई का समय हो गया है।")
+                lang = req_data.get("language", "Hindi")
+                audio_bytes = speak_turn(text, language=lang, speaker="ritu", pace=0.92)
+                b64 = base64.b64encode(audio_bytes).decode("utf-8") if audio_bytes else ""
+                self._send_json({"audio_base64": b64, "text": text, "language": lang})
+            except Exception as e:
+                print(f"[speak-reminder] Error: {e}", file=sys.stderr)
+                self._send_json({
+                    "audio_base64": "",
+                    "error": str(e),
+                    "text": req_data.get("text", "दवाई का समय हो गया है।"),
+                    "language": req_data.get("language", "Hindi")
+                })
             return
 
         # ── ENDPOINT: PARSE & UPLOAD PRESCRIPTION (SARVAM VISION + 105B) ─────

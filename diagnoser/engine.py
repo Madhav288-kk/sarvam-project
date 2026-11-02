@@ -83,7 +83,7 @@ Output format: STRICT JSON matching this schema:
   "home_care_and_precautions": [
     "Safe comfort measure or precaution (e.g., पानी की पर्याप्त मात्रा लें)"
   ],
-  "spoken_explanation": "A natural, conversational 3-4 sentence spoken summary by the doctor in Hindi explaining the situation calmly, what might be happening, safe mild relief measures, and whether they need to go to the hospital immediately."
+  "spoken_explanation": "A natural, conversational 3-4 sentence spoken summary by the doctor in the requested language explaining the situation calmly, what might be happening, safe mild relief measures, and whether they need to go to the hospital immediately. (NOTE: For Sindhi, Urdu, or Kashmiri, write in Devanagari script so Indic TTS engines speak the native words smoothly)."
 }
 """
 
