@@ -792,6 +792,33 @@ HTML_CONTENT = """<!DOCTYPE html>
 </div>
 
 <script>
+// ── TOP-LEVEL GLOBAL APPLICATION STATE ──────────────────────────────────────
+var currentTimetableData = null;
+var callHistory = [];
+var uploadedFileBase64 = null;
+var uploadedFileName = "";
+var diagAudioInstance = null;
+var currentDiagAudioB64 = null;
+var activeSlotAudio = null;
+var activeSlotBtn = null;
+var allTimetableAudio = null;
+var currentBubbleAudio = null;
+var currentBubbleBtn = null;
+var callAudioPlayer = new Audio();
+var currentPlayingBtnId = null;
+var isCompRecording = false;
+var compMediaRecorder = null;
+var compAudioChunks = [];
+var isDiagRecording = false;
+var diagMediaRecorder = null;
+var diagAudioChunks = [];
+var diagChatHistory = [];
+var diagPatientContext = {};
+var currentDiagSpokenText = "";
+var isDiagChatRecording = false;
+var diagChatMediaRecorder = null;
+var diagChatAudioChunks = [];
+
 // ── CLIENT-SIDE STORAGE & PROFILE MANAGEMENT ────────────────────────────────
 function getStoredProfile() {
   try {
@@ -1133,13 +1160,27 @@ function requireProfileValidation() {
 
 // ── TAB SWITCHING ──────────────────────────────────────────────────────────
 function switchTab(tabId) {
-  if (typeof stopAllActiveAudio === 'function') stopAllActiveAudio();
-  ['diagnose', 'prescription', 'companion'].forEach(t => {
-    document.getElementById('tab-' + t).style.display = (t === tabId ? 'block' : 'none');
-    document.getElementById('tab-btn-' + t).classList.toggle('active', t === tabId);
-  });
-  if (typeof updatePrescriptionUI === 'function') {
-    updatePrescriptionUI();
+  try {
+    ['diagnose', 'prescription', 'companion'].forEach(t => {
+      const el = document.getElementById('tab-' + t);
+      const btn = document.getElementById('tab-btn-' + t);
+      if (el) el.style.display = (t === tabId ? 'block' : 'none');
+      if (btn) btn.classList.toggle('active', t === tabId);
+    });
+  } catch (e) {
+    console.warn("Tab switch DOM error:", e);
+  }
+
+  try {
+    if (typeof stopAllActiveAudio === 'function') stopAllActiveAudio();
+  } catch (e) {
+    console.warn("Audio stop error on tab switch:", e);
+  }
+
+  try {
+    if (typeof updatePrescriptionUI === 'function') updatePrescriptionUI();
+  } catch (e) {
+    console.warn("Prescription UI sync error on tab switch:", e);
   }
 }
 
@@ -1148,9 +1189,9 @@ function setPreset(txt) {
 }
 
 // ── TAB 1: DIAGNOSER LOGIC ──────────────────────────────────────────────────
-let isDiagRecording = false;
-let diagMediaRecorder = null;
-let diagAudioChunks = [];
+isDiagRecording = false;
+diagMediaRecorder = null;
+diagAudioChunks = [];
 
 async function toggleDiagMic() {
   const profile = requireProfileValidation();
@@ -1252,9 +1293,9 @@ async function runDiagnosis() {
 }
 
 // ── TAB 1: DIAGNOSIS RESULT & AUDIO CONTROLLER ────────────────────────────
-let diagAudioInstance = null;
-let currentDiagAudioB64 = null;
-let currentDiagSpokenText = "";
+diagAudioInstance = null;
+currentDiagAudioB64 = null;
+currentDiagSpokenText = "";
 
 function renderDiagnosis(data) {
   const container = document.getElementById('diag-result-container');
@@ -1605,14 +1646,13 @@ function resetDiagConsultation() {
 }
 
 // ── FOLLOW-UP CONSULTATION INTERACTIVE CHAT LOGIC ─────────────────────────
-let diagChatHistory = [];
-let diagPatientContext = {};
-let isDiagChatRecording = false;
-let diagChatMediaRecorder = null;
-let diagChatAudioChunks = [];
-
-let currentBubbleAudio = null;
-let currentBubbleBtn = null;
+diagChatHistory = [];
+diagPatientContext = {};
+isDiagChatRecording = false;
+diagChatMediaRecorder = null;
+diagChatAudioChunks = [];
+currentBubbleAudio = null;
+currentBubbleBtn = null;
 
 function toggleBubbleAudio(btn, audioB64) {
   if (currentBubbleAudio && currentBubbleBtn === btn) {
@@ -1819,8 +1859,8 @@ async function toggleDiagChatMic() {
 }
 
 // ── TAB 2: PRESCRIPTION UPLOAD & DYNAMIC TIMETABLE ──────────────────────────
-let uploadedFileBase64 = null;
-let uploadedFileName = "";
+uploadedFileBase64 = null;
+uploadedFileName = "";
 
 function onFileSelected(input) {
   if (!input.files || !input.files[0]) return;
@@ -1968,10 +2008,10 @@ function toggleMedTaken(rowId, checkbox) {
 }
 
 // ── PLAY / PAUSE AUDIO CONTROLLERS FOR TIMETABLE ───────────────────────────
-let activeSlotAudio = null;
-let activeSlotBtn = null;
-let allTimetableAudio = null;
-let currentTimetableData = null;
+activeSlotAudio = null;
+activeSlotBtn = null;
+allTimetableAudio = null;
+currentTimetableData = null;
 
 function stopAllActiveAudio() {
   if (diagAudioInstance) {
@@ -2305,8 +2345,6 @@ function playAudioBase64(base64Data) {
 }
 
 // ── TAB 3: COMPANION VOICE CALL & AUTOPLAY CONTROLLER ──────────────────────
-let callAudioPlayer = new Audio();
-let currentPlayingBtnId = null;
 
 function isCallAutoplayEnabled() {
   const stored = localStorage.getItem('sarvam_call_autoplay');
@@ -2397,10 +2435,10 @@ function toggleCallTurnAudio(btnId, audioB64) {
   }
 }
 
-let callHistory = [];
-let isCompRecording = false;
-let compMediaRecorder = null;
-let compAudioChunks = [];
+callHistory = [];
+isCompRecording = false;
+compMediaRecorder = null;
+compAudioChunks = [];
 
 async function startCall() {
   primeAudioPlayer();
