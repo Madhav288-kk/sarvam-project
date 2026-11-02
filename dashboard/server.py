@@ -2460,7 +2460,7 @@ async function startCall() {
 
   const activeRx = getActivePrescription();
   if (!activeRx || !activeRx.timetable) {
-    alert("⚠️ No active prescription found! Outbound call requires an uploaded prescription.\nPlease upload a doctor prescription in Tab 2 first.");
+    alert("⚠️ No active prescription found! Outbound call requires an uploaded prescription.\\nPlease upload a doctor prescription in Tab 2 first.");
     switchTab('prescription');
     return;
   }
