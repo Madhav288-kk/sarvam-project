@@ -418,6 +418,32 @@ HTML_CONTENT = """<!DOCTYPE html>
     .input-bar input { flex: 1; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 10px; color: white; padding: 10px 14px; font-size: 13.5px; outline: none; }
     .presets-container { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
     .med-tag { display: inline-block; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; padding: 3px 10px; border-radius: 12px; font-size: 12px; margin: 3px; }
+    .rx-pill {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .rx-pill:hover {
+      background: rgba(124, 58, 237, 0.25);
+      border-color: rgba(124, 58, 237, 0.5);
+      color: #fff;
+    }
+    .rx-pill.active {
+      background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+      border-color: #a78bfa;
+      color: #fff;
+      font-weight: 600;
+      box-shadow: 0 0 12px rgba(124, 58, 237, 0.45);
+    }
 
     @media (max-width: 768px) {
       body { padding: 12px; }
@@ -561,6 +587,27 @@ HTML_CONTENT = """<!DOCTYPE html>
   <!-- TAB 2: INTERACTIVE PRESCRIPTION UPLOADER & TIMETABLE                -->
   <!-- ════════════════════════════════════════════════════════════════════ -->
   <div id="tab-prescription" style="display:none;">
+    <!-- Multi-Prescription Switcher Bar -->
+    <div id="rx-switcher-tab2" style="display:none; margin-bottom: 20px; background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(124, 58, 237, 0.35); padding: 14px 18px; border-radius: 12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="font-size:14px; color:#c4b5fd; font-weight:700;">📂 Prescriptions:</span>
+          <div id="rx-pills-container-tab2" style="display:inline-flex; gap:8px; flex-wrap:wrap;"></div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button class="btn btn-purple" onclick="prepareNewPrescriptionUpload()" style="padding: 6px 12px; font-size: 11.5px; display:inline-flex; align-items:center; gap:5px;">
+            <span>➕</span> <span>Upload Another</span>
+          </button>
+          <button class="btn btn-secondary" onclick="deleteActivePrescription()" style="padding: 6px 10px; font-size: 11.5px; color:#f87171;" title="Delete currently selected prescription">
+            <span>🗑️</span> <span>Delete Active</span>
+          </button>
+          <button class="btn btn-secondary" onclick="clearAllPrescriptions()" style="padding: 6px 10px; font-size: 11.5px; color:#94a3b8;" title="Clear all saved prescriptions to start fresh">
+            <span>🔄</span> <span>Clear All</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Upload & Input Card -->
     <div class="card" style="border: 1px solid #7c3aed; background: linear-gradient(180deg, #1b1736 0%, #111827 100%);">
       <div class="card-header">
@@ -656,8 +703,34 @@ HTML_CONTENT = """<!DOCTYPE html>
               <input type="checkbox" id="call-autoplay-toggle" checked onchange="toggleCallAutoplay(this.checked)" style="cursor:pointer; width:16px; height:16px; accent-color:#38bdf8;">
               <span id="call-autoplay-label" style="font-weight:600; color:#38bdf8;">🔊 Autoplay: ON</span>
             </label>
-            <span class="badge active">● AI Bot Ready</span>
+            <span class="badge active" id="tab3-bot-badge">● AI Bot Ready</span>
           </div>
+        </div>
+
+        <!-- Warning when no prescription is uploaded -->
+        <div id="tab3-no-prescription-warning" style="display:none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); padding: 12px 16px; border-radius: 10px; margin-bottom: 14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:18px;">⚠️</span>
+              <div style="font-size:12.5px; color:#fca5a5; font-weight:600;">
+                No prescription uploaded yet! Outbound call is disabled until a prescription is added.
+              </div>
+            </div>
+            <button class="btn btn-purple" onclick="switchTab('prescription')" style="padding: 5px 12px; font-size: 11px;">
+              📄 Upload Prescription (Tab 2)
+            </button>
+          </div>
+        </div>
+
+        <!-- Prescription Context Selector in Tab 3 -->
+        <div id="tab3-rx-selector-bar" style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(59, 130, 246, 0.3); padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:12.5px; color:#38bdf8; font-weight:700;">📋 Follow-Up Prescription:</span>
+            <select id="tab3-rx-select" class="form-input" style="padding: 4px 10px; font-size: 12px; width:auto; max-width:240px;" onchange="onTab3RxSelected(this.value)">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+          <div style="font-size:11.5px; color:#94a3b8;" id="tab3-rx-summary-pill"></div>
         </div>
 
         <div class="call-window" id="call-window">
@@ -734,18 +807,241 @@ function saveStoredProfile(p) {
   } catch (e) {}
 }
 
-function getStoredTimetable() {
+// ── MULTI-PRESCRIPTION MANAGEMENT & STORAGE ─────────────────────────────────
+function getStoredPrescriptions() {
   try {
-    const raw = localStorage.getItem('sarvam_patient_timetable');
+    const raw = localStorage.getItem('sarvam_prescriptions');
     if (raw) return JSON.parse(raw);
   } catch (e) {}
-  return null;
+  return [];
+}
+
+function saveStoredPrescriptions(list) {
+  try {
+    localStorage.setItem('sarvam_prescriptions', JSON.stringify(list));
+  } catch (e) {}
+}
+
+function getActiveRxId() {
+  return localStorage.getItem('sarvam_active_rx_id') || null;
+}
+
+function setActiveRxId(id) {
+  if (id) {
+    localStorage.setItem('sarvam_active_rx_id', id);
+  } else {
+    localStorage.removeItem('sarvam_active_rx_id');
+  }
+  updatePrescriptionUI();
+}
+
+function getActivePrescription() {
+  const list = getStoredPrescriptions();
+  if (!list || list.length === 0) return null;
+  const activeId = getActiveRxId();
+  if (activeId) {
+    const found = list.find(rx => rx.id === activeId);
+    if (found) return found;
+  }
+  return list[0] || null;
+}
+
+function getStoredTimetable() {
+  const active = getActivePrescription();
+  return active ? active.timetable : null;
 }
 
 function saveStoredTimetable(tt) {
-  try {
-    localStorage.setItem('sarvam_patient_timetable', JSON.stringify(tt));
-  } catch (e) {}
+  addPrescription(tt);
+}
+
+function addPrescription(tt) {
+  const list = getStoredPrescriptions();
+  const rxId = 'rx_' + Date.now();
+  const doc = tt.doctor_name || 'Attending Physician';
+  const hosp = tt.hospital_name || 'General Clinic';
+  const diag = tt.diagnosis || 'Care Plan';
+  const rxNum = list.length + 1;
+  const title = `Rx #${rxNum}: ${hosp} (${doc})`;
+
+  const newRx = {
+    id: rxId,
+    title: title,
+    doctor: doc,
+    hospital: hosp,
+    diagnosis: diag,
+    timetable: tt,
+    date: new Date().toLocaleDateString()
+  };
+
+  list.push(newRx);
+  saveStoredPrescriptions(list);
+  setActiveRxId(rxId);
+  return newRx;
+}
+
+function deleteActivePrescription() {
+  const active = getActivePrescription();
+  if (!active) return;
+  if (!confirm(`Are you sure you want to remove "${active.title}"?`)) return;
+
+  let list = getStoredPrescriptions();
+  list = list.filter(rx => rx.id !== active.id);
+  saveStoredPrescriptions(list);
+  if (list.length > 0) {
+    setActiveRxId(list[list.length - 1].id);
+  } else {
+    setActiveRxId(null);
+  }
+}
+
+function clearAllPrescriptions() {
+  if (!confirm("Are you sure you want to clear all saved prescriptions? Outbound check-in call will be disabled until you upload a new one.")) return;
+  saveStoredPrescriptions([]);
+  setActiveRxId(null);
+  localStorage.removeItem('sarvam_patient_timetable');
+  updatePrescriptionUI();
+}
+
+function prepareNewPrescriptionUpload() {
+  document.getElementById('prescription-text-input').value = '';
+  uploadedFileBase64 = null;
+  uploadedFileName = null;
+  const dropText = document.getElementById('drop-zone-text');
+  if (dropText) dropText.innerHTML = 'Click to Select Prescription File (PDF, PNG, JPG)';
+  const fileInput = document.getElementById('prescription-file-input');
+  if (fileInput) fileInput.value = '';
+  const txtArea = document.getElementById('prescription-text-input');
+  if (txtArea) {
+    txtArea.focus();
+    txtArea.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+function onTab3RxSelected(rxId) {
+  setActiveRxId(rxId);
+}
+
+function updatePrescriptionUI() {
+  const list = getStoredPrescriptions();
+  const activeRx = getActivePrescription();
+
+  // 1. Update Tab 2 Multi-Prescription Switcher Bar
+  const tab2Switcher = document.getElementById('rx-switcher-tab2');
+  const tab2Pills = document.getElementById('rx-pills-container-tab2');
+  const reminderContainer = document.getElementById('reminder-timetable-container');
+
+  if (list.length > 0) {
+    if (tab2Switcher) tab2Switcher.style.display = 'block';
+    if (tab2Pills) {
+      tab2Pills.innerHTML = list.map((rx, idx) => {
+        const isActive = activeRx && activeRx.id === rx.id;
+        const label = rx.hospital && rx.hospital !== 'General Hospital / Clinic' ? `${rx.hospital} (${rx.doctor})` : (rx.title || `Prescription #${idx + 1}`);
+        return `<button class="rx-pill ${isActive ? 'active' : ''}" onclick="setActiveRxId('${rx.id}')">
+          <span>📑</span> <span>${label}</span>
+        </button>`;
+      }).join('');
+    }
+  } else {
+    if (tab2Switcher) tab2Switcher.style.display = 'none';
+  }
+
+  // 2. Render or hide active timetable in Tab 2
+  if (activeRx && activeRx.timetable) {
+    renderTimetable(activeRx.timetable);
+  } else {
+    if (reminderContainer) reminderContainer.style.display = 'none';
+    currentTimetableData = null;
+  }
+
+  // 3. Tab 3 Outbound Call Lock / Unlock and Prescription Selector
+  const tab3Warning = document.getElementById('tab3-no-prescription-warning');
+  const tab3SelectBar = document.getElementById('tab3-rx-selector-bar');
+  const tab3Select = document.getElementById('tab3-rx-select');
+  const tab3Summary = document.getElementById('tab3-rx-summary-pill');
+  const startCallBtn = document.getElementById('start-call-btn');
+  const tab3BotBadge = document.getElementById('tab3-bot-badge');
+  const tab3CallWindow = document.getElementById('call-window');
+
+  if (!activeRx || !activeRx.timetable) {
+    // DISABLE Outbound Call completely
+    if (tab3Warning) tab3Warning.style.display = 'block';
+    if (tab3SelectBar) tab3SelectBar.style.display = 'none';
+    if (startCallBtn) {
+      startCallBtn.disabled = true;
+      startCallBtn.style.opacity = '0.45';
+      startCallBtn.style.cursor = 'not-allowed';
+      startCallBtn.title = 'Please upload a prescription in Tab 2 first';
+    }
+    if (tab3BotBadge) {
+      tab3BotBadge.className = 'badge';
+      tab3BotBadge.innerText = '⚠️ Prescription Required';
+      tab3BotBadge.style.color = '#f87171';
+      tab3BotBadge.style.background = 'rgba(239, 68, 68, 0.15)';
+      tab3BotBadge.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+    }
+
+    const tab3Hosp = document.getElementById('tab3-hospital');
+    if (tab3Hosp) tab3Hosp.innerText = 'No prescription uploaded';
+    const tab3Doc = document.getElementById('tab3-doctor');
+    if (tab3Doc) tab3Doc.innerText = 'No prescription uploaded';
+    const tab3Diag = document.getElementById('tab3-diagnosis');
+    if (tab3Diag) tab3Diag.innerText = 'No prescription uploaded';
+    const tab3Meds = document.getElementById('tab3-meds-list');
+    if (tab3Meds) tab3Meds.innerHTML = '<span style="color:#94a3b8;">None recorded (Upload in Tab 2)</span>';
+
+    if (tab3CallWindow && (!callHistory || callHistory.length === 0)) {
+      tab3CallWindow.innerHTML = `
+        <div class="chat-bubble chat-agent">
+          <div class="bubble-speaker"><span>🤖 Hospital Care Agent</span></div>
+          <div>⚠️ <strong>Outbound call is currently disabled.</strong><br>An outbound follow-up call requires a prescribed medication regimen. Please switch to <strong>Tab 2 (Upload Prescription)</strong> to upload or enter a prescription. Once added, the AI agent will automatically become ready to call you!</div>
+        </div>
+      `;
+    }
+  } else {
+    // ENABLE Outbound Call
+    if (tab3Warning) tab3Warning.style.display = 'none';
+    if (tab3SelectBar) tab3SelectBar.style.display = 'flex';
+    if (startCallBtn) {
+      startCallBtn.disabled = false;
+      startCallBtn.style.opacity = '1';
+      startCallBtn.style.cursor = 'pointer';
+      startCallBtn.title = '';
+    }
+    if (tab3BotBadge) {
+      tab3BotBadge.className = 'badge active';
+      tab3BotBadge.innerText = '● AI Bot Ready';
+      tab3BotBadge.style.color = '#34d399';
+      tab3BotBadge.style.background = 'rgba(16, 185, 129, 0.2)';
+      tab3BotBadge.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+    }
+
+    // Populate Tab 3 Dropdown
+    if (tab3Select) {
+      tab3Select.innerHTML = list.map((rx, idx) => {
+        const isSel = rx.id === activeRx.id ? 'selected' : '';
+        const name = rx.hospital && rx.hospital !== 'General Hospital / Clinic' ? `${rx.hospital} (${rx.doctor})` : (rx.title || `Prescription #${idx + 1}`);
+        return `<option value="${rx.id}" ${isSel}>${name}</option>`;
+      }).join('');
+    }
+
+    const medsCount = (activeRx.timetable.medications_list || []).length;
+    if (tab3Summary) {
+      tab3Summary.innerText = `${medsCount} Medicines • ${activeRx.doctor || 'Doctor'}`;
+    }
+
+    // Update Tab 3 metadata elements
+    const tab3Hosp = document.getElementById('tab3-hospital');
+    if (tab3Hosp) tab3Hosp.innerText = activeRx.timetable.hospital_name || 'General Hospital / Clinic';
+    const tab3Doc = document.getElementById('tab3-doctor');
+    if (tab3Doc) tab3Doc.innerText = activeRx.timetable.doctor_name || 'Attending Physician';
+    const tab3Diag = document.getElementById('tab3-diagnosis');
+    if (tab3Diag) tab3Diag.innerText = activeRx.timetable.diagnosis || 'Prescription Care Plan';
+    const tab3Meds = document.getElementById('tab3-meds-list');
+    if (tab3Meds && activeRx.timetable.medications_list) {
+      tab3Meds.innerHTML = activeRx.timetable.medications_list.map(m => `<span class="med-tag">${m}</span>`).join(' ');
+    }
+  }
 }
 
 // Initialize on page load
@@ -759,11 +1055,8 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   updateProfileBadge();
 
-  // Load stored timetable if any exists on this device
-  const tt = getStoredTimetable();
-  if (tt) {
-    renderTimetable(tt);
-  }
+  // Load and sync prescriptions (or disable call if none exist)
+  updatePrescriptionUI();
 
   // Initialize outbound call autoplay setting
   if (typeof initCallAutoplayToggle === 'function') {
@@ -840,10 +1133,14 @@ function requireProfileValidation() {
 
 // ── TAB SWITCHING ──────────────────────────────────────────────────────────
 function switchTab(tabId) {
+  if (typeof stopAllActiveAudio === 'function') stopAllActiveAudio();
   ['diagnose', 'prescription', 'companion'].forEach(t => {
     document.getElementById('tab-' + t).style.display = (t === tabId ? 'block' : 'none');
     document.getElementById('tab-btn-' + t).classList.toggle('active', t === tabId);
   });
+  if (typeof updatePrescriptionUI === 'function') {
+    updatePrescriptionUI();
+  }
 }
 
 function setPreset(txt) {
@@ -2110,6 +2407,13 @@ async function startCall() {
   const profile = requireProfileValidation();
   if (!profile) return;
 
+  const activeRx = getActivePrescription();
+  if (!activeRx || !activeRx.timetable) {
+    alert("⚠️ No active prescription found! Outbound call requires an uploaded prescription.\nPlease upload a doctor prescription in Tab 2 first.");
+    switchTab('prescription');
+    return;
+  }
+
   document.getElementById('call-window').innerHTML = '';
   document.getElementById('start-call-btn').style.display = 'none';
   document.getElementById('end-call-btn').style.display = 'inline-flex';
@@ -2119,7 +2423,7 @@ async function startCall() {
   document.getElementById('comp-send-btn').disabled = false;
   document.getElementById('comp-user-input').focus();
 
-  const tt = getStoredTimetable();
+  const tt = activeRx.timetable;
   const medsList = tt && tt.medications_list ? tt.medications_list : [];
   const doctorName = tt && tt.doctor_name ? tt.doctor_name : "";
   const hospitalName = tt && tt.hospital_name ? tt.hospital_name : "";
