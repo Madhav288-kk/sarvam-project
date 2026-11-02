@@ -649,9 +649,15 @@ HTML_CONTENT = """<!DOCTYPE html>
     <div class="main-grid">
       <!-- Live Call Simulator with Voice Recording -->
       <div class="card live-call-card" style="border: 1px solid #3b82f6;">
-        <div class="card-header">
+        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
           <h2>📞 Outbound Voice Check-In Call</h2>
-          <span class="badge active">● AI Bot Ready</span>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <label style="font-size:12px; color:#cbd5e1; display:flex; align-items:center; gap:8px; cursor:pointer; background:rgba(30, 41, 59, 0.85); padding:6px 12px; border-radius:20px; border:1px solid rgba(59, 130, 246, 0.4); user-select:none;" title="Enable or disable automatic voice playback for AI doctor responses">
+              <input type="checkbox" id="call-autoplay-toggle" checked onchange="toggleCallAutoplay(this.checked)" style="cursor:pointer; width:16px; height:16px; accent-color:#38bdf8;">
+              <span id="call-autoplay-label" style="font-weight:600; color:#38bdf8;">🔊 Autoplay: ON</span>
+            </label>
+            <span class="badge active">● AI Bot Ready</span>
+          </div>
         </div>
 
         <div class="call-window" id="call-window">
@@ -757,6 +763,11 @@ window.addEventListener('DOMContentLoaded', () => {
   const tt = getStoredTimetable();
   if (tt) {
     renderTimetable(tt);
+  }
+
+  // Initialize outbound call autoplay setting
+  if (typeof initCallAutoplayToggle === 'function') {
+    initCallAutoplayToggle();
   }
 });
 
@@ -1713,6 +1724,15 @@ function stopAllActiveAudio() {
     currentBubbleAudio = null;
     currentBubbleBtn = null;
   }
+  if (typeof callAudioPlayer !== 'undefined' && callAudioPlayer) {
+    callAudioPlayer.pause();
+    callAudioPlayer.currentTime = 0;
+    if (typeof currentPlayingBtnId !== 'undefined' && currentPlayingBtnId) {
+      const prevBtn = document.getElementById(currentPlayingBtnId);
+      if (prevBtn) prevBtn.innerHTML = '▶ Replay';
+      currentPlayingBtnId = null;
+    }
+  }
 }
 
 function playBrowserSpeech(text, lang, onEnd) {
@@ -1984,17 +2004,109 @@ function playSlotVoice(speechText) {
 
 function playAudioBase64(base64Data) {
   if (!base64Data) return;
-  const audio = new Audio("data:audio/wav;base64," + base64Data);
-  audio.play();
+  toggleCallTurnAudio('legacy-call-btn', base64Data);
 }
 
-// ── TAB 3: COMPANION VOICE CALL LOGIC ───────────────────────────────────────
+// ── TAB 3: COMPANION VOICE CALL & AUTOPLAY CONTROLLER ──────────────────────
+let callAudioPlayer = new Audio();
+let currentPlayingBtnId = null;
+
+function isCallAutoplayEnabled() {
+  const stored = localStorage.getItem('sarvam_call_autoplay');
+  return stored === null ? true : stored === 'true';
+}
+
+function toggleCallAutoplay(enabled) {
+  localStorage.setItem('sarvam_call_autoplay', enabled ? 'true' : 'false');
+  const label = document.getElementById('call-autoplay-label');
+  if (label) {
+    label.innerText = enabled ? '🔊 Autoplay: ON' : '🔈 Autoplay: OFF';
+    label.style.color = enabled ? '#38bdf8' : '#94a3b8';
+  }
+}
+
+function initCallAutoplayToggle() {
+  const enabled = isCallAutoplayEnabled();
+  const toggle = document.getElementById('call-autoplay-toggle');
+  const label = document.getElementById('call-autoplay-label');
+  if (toggle) toggle.checked = enabled;
+  if (label) {
+    label.innerText = enabled ? '🔊 Autoplay: ON' : '🔈 Autoplay: OFF';
+    label.style.color = enabled ? '#38bdf8' : '#94a3b8';
+  }
+}
+
+// Prime the audio player during a user interaction to keep autoplay unlocked across async turns
+function primeAudioPlayer() {
+  try {
+    callAudioPlayer.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+    const p = callAudioPlayer.play();
+    if (p !== undefined) {
+      p.then(() => {
+        callAudioPlayer.pause();
+      }).catch(() => {});
+    }
+  } catch (e) {}
+}
+
+function toggleCallTurnAudio(btnId, audioB64) {
+  if (!audioB64) return;
+  const btn = document.getElementById(btnId);
+
+  // If this audio is currently playing -> pause it
+  if (callAudioPlayer && currentPlayingBtnId === btnId && !callAudioPlayer.paused) {
+    callAudioPlayer.pause();
+    if (btn) btn.innerHTML = '▶ Resume';
+    return;
+  }
+
+  // If this audio is paused -> resume it
+  if (callAudioPlayer && currentPlayingBtnId === btnId && callAudioPlayer.paused && callAudioPlayer.currentTime > 0) {
+    callAudioPlayer.play().catch(e => console.log('Audio resume error:', e));
+    if (btn) btn.innerHTML = '⏸ Pause';
+    return;
+  }
+
+  // Stop any other active audio
+  if (callAudioPlayer) {
+    callAudioPlayer.pause();
+    if (currentPlayingBtnId) {
+      const prevBtn = document.getElementById(currentPlayingBtnId);
+      if (prevBtn) prevBtn.innerHTML = '▶ Replay';
+    }
+  }
+  if (typeof stopAllActiveAudio === 'function') stopAllActiveAudio();
+
+  callAudioPlayer.src = "data:audio/wav;base64," + audioB64;
+  currentPlayingBtnId = btnId;
+  if (btn) btn.innerHTML = '⏸ Pause';
+
+  callAudioPlayer.onended = () => {
+    if (btn) btn.innerHTML = '▶ Replay';
+    if (currentPlayingBtnId === btnId) {
+      currentPlayingBtnId = null;
+    }
+  };
+
+  const playPromise = callAudioPlayer.play();
+  if (playPromise !== undefined) {
+    playPromise.catch(err => {
+      console.warn("Autoplay was prevented by browser gesture policy:", err);
+      if (btn) btn.innerHTML = '▶ Play';
+      if (currentPlayingBtnId === btnId) {
+        currentPlayingBtnId = null;
+      }
+    });
+  }
+}
+
 let callHistory = [];
 let isCompRecording = false;
 let compMediaRecorder = null;
 let compAudioChunks = [];
 
 async function startCall() {
+  primeAudioPlayer();
   const profile = requireProfileValidation();
   if (!profile) return;
 
@@ -2037,8 +2149,10 @@ function appendCallMsg(role, text, audioB64) {
 
   let speakerLabel = role === 'assistant' ? '🤖 Care Agent (Bulbul v3)' : '👤 Patient (You)';
   let playBtnHtml = '';
-  if (audioB64) {
-    playBtnHtml = `<button class="play-turn-btn" onclick="playAudioBase64('${audioB64}')">▶ Replay</button>`;
+  const btnId = 'call-turn-btn-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+
+  if (audioB64 && role === 'assistant') {
+    playBtnHtml = `<button id="${btnId}" class="play-turn-btn" onclick="toggleCallTurnAudio('${btnId}', '${audioB64}')">▶ Replay</button>`;
   }
 
   d.innerHTML = `
@@ -2050,10 +2164,22 @@ function appendCallMsg(role, text, audioB64) {
   `;
   win.appendChild(d);
   win.scrollTop = win.scrollHeight;
-  if (audioB64) playAudioBase64(audioB64);
+
+  // Auto-play every AI response if user has Autoplay enabled
+  if (audioB64 && role === 'assistant') {
+    if (isCallAutoplayEnabled()) {
+      setTimeout(() => {
+        toggleCallTurnAudio(btnId, audioB64);
+      }, 150);
+    } else {
+      const btn = document.getElementById(btnId);
+      if (btn) btn.innerHTML = '▶ Play';
+    }
+  }
 }
 
 async function toggleCompanionRecording() {
+  primeAudioPlayer();
   const profile = getStoredProfile();
   const btn = document.getElementById('comp-record-btn');
   const txt = document.getElementById('comp-mic-text');
@@ -2118,6 +2244,7 @@ async function toggleCompanionRecording() {
       alert("Microphone error: " + err.message + "\\nYou can type in the box below!");
     }
   } else {
+    primeAudioPlayer();
     compMediaRecorder.stop();
     isCompRecording = false;
     btn.classList.remove('recording');
@@ -2126,6 +2253,7 @@ async function toggleCompanionRecording() {
 }
 
 async function sendCompanionTurn() {
+  primeAudioPlayer();
   const profile = getStoredProfile();
   const inputEl = document.getElementById('comp-user-input');
   const text = inputEl.value.trim();
@@ -2161,11 +2289,21 @@ async function sendCompanionTurn() {
 }
 
 function useCompanionPreset(text) {
+  primeAudioPlayer();
   document.getElementById('comp-user-input').value = text;
   sendCompanionTurn();
 }
 
 async function endCall() {
+  if (callAudioPlayer) {
+    callAudioPlayer.pause();
+    callAudioPlayer.currentTime = 0;
+    if (currentPlayingBtnId) {
+      const prevBtn = document.getElementById(currentPlayingBtnId);
+      if (prevBtn) prevBtn.innerHTML = '▶ Replay';
+      currentPlayingBtnId = null;
+    }
+  }
   const profile = getStoredProfile();
   document.getElementById('comp-record-btn').disabled = true;
   document.getElementById('comp-user-input').disabled = true;
