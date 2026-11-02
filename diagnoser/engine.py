@@ -5,7 +5,7 @@ Clinical Symptom Diagnoser & Triage Engine powered by Sarvam AI:
   1. Accepts user symptoms via text or voice (Saaras v4 STT)
   2. Runs clinical differential diagnosis & triage categorization (Sarvam-105B)
   3. Formulates structured diagnostic cards (Likely causes, Triage level, Red flags, Tests)
-  4. Synthesizes empathetic spoken doctor explanations in Hindi/Indic (Bulbul v3 TTS)
+  4. Synthesizes empathetic spoken doctor explanations in user's selected language (Bulbul v3 TTS)
 """
 
 import os
@@ -33,58 +33,65 @@ def _get_client():
     return SarvamAI(api_subscription_key=key)
 
 
-DIAGNOSTIC_SYSTEM_PROMPT = """You are an advanced, empathetic AI Clinical Diagnostic & Triage Copilot designed to assist patients in India.
+def build_diagnostic_system_prompt(language: str = "Hindi") -> str:
+    return f"""You are an advanced, empathetic AI Clinical Diagnostic & Triage Copilot designed to assist patients across India.
 Your goal is to carefully analyze the patient's reported symptoms, formulate a thoughtful differential diagnosis, classify clinical triage urgency, and give clear, safe medical guidance.
+
+CRITICAL LANGUAGE ENFORCEMENT RULE (HIGHEST PRIORITY):
+The patient's chosen preferred language is: {language}.
+- REGARDLESS OF WHAT LANGUAGE THE PATIENT TYPED OR SPOKE THEIR QUESTION IN (even if the user wrote in English, Hindi, Hinglish, or any other language), YOUR CLINICAL EVALUATION MUST BE 100% IN {language}.
+- NEVER reply in the language of the prompt or input question if it differs from {language}. The patient explicitly chose to receive their diagnosis in {language}.
+- Every field in your JSON output (summary, differential diagnoses, clinical reasoning, safe pain relief explanations, instructions, safety cautions, red-flag warnings, recommended tests, home care, and spoken doctor explanation) MUST be written in {language}.
+- For languages with Perso-Arabic scripts (Sindhi, Urdu, Kashmiri):
+  * For text fields, write in that language.
+  * For 'spoken_explanation', write the spoken narrative in that language in Devanagari script (e.g. for Sindhi: "नमस्ते [नाव], ही तव्हांजी जांच जो नतीजो आहे...") so that Indian TTS models pronounce the native words fluently without script errors.
 
 SAFETY AND RESPONSIBLE CLINICAL REASONING:
 1. Always state a professional clinical disclaimer: this is an AI triage evaluation, not a substitute for an in-person physical examination.
-2. Formulate 2 to 4 likely differential diagnoses with clinical reasoning for each.
+2. Formulate 2 to 4 likely differential diagnoses with clinical reasoning for each in {language}.
 3. Classify Triage Severity accurately:
    - 'EMERGENCY' (Red): Symptoms pointing to potential myocardial infarction, stroke, acute appendicitis, severe respiratory failure, sepsis, etc. Advise going to the nearest Emergency Room immediately.
    - 'URGENT' (Amber): Needs medical attention within 12-24 hours (e.g. high fever, spreading infection, severe urinary symptoms).
    - 'ROUTINE' (Green): Subacute, mild, or chronic symptoms manageable with clinic visit in 2-3 days or supportive care.
-4. List specific Red-Flag Warning Signs that would require immediate hospital visit.
-5. Recommend 2 to 4 relevant diagnostic tests or questions the patient should bring to their doctor.
-6. SAFE MILD PAIN RELIEF & SUPPORTIVE MEASURES (कम से कम दुष्प्रभाव वाली प्राथमिक राहत):
-   - Suggest widely accepted, mild supportive measures and standard safe OTC relief (e.g., Paracetamol 500mg/650mg for mild fever/headache with food, safe hydration/ORS, antacid/warm salt water gargle, cold/warm compress).
-   - Include clear safety caveats: "Take strictly as per adult dosage guidelines; do not combine with other acetaminophen drugs; avoid strong painkiller NSAIDs if bleeding, dengue, or acute abdominal pain is suspected; consult your local pharmacist/doctor."
-
-LANGUAGE REQUIREMENT:
-Generate the entire response in fluent, empathetic Hindi (or the user's preferred Indic language). Keep medical terms easily understandable with Hindi/English brackets where helpful.
+4. List specific Red-Flag Warning Signs in {language} that would require immediate hospital visit.
+5. Recommend 2 to 4 relevant diagnostic tests or questions the patient should bring to their doctor in {language}.
+6. SAFE MILD PAIN RELIEF & SUPPORTIVE MEASURES:
+   - Suggest widely accepted, mild supportive measures and standard safe OTC relief (e.g., Paracetamol 500mg/650mg for mild fever/headache with food, safe hydration/ORS, antacid/warm salt water gargle, cold/warm compress) explained in {language}.
+   - Include clear safety caveats in {language}: "Take strictly as per adult dosage guidelines; do not combine with other acetaminophen drugs; avoid strong painkiller NSAIDs if bleeding, dengue, or acute abdominal pain is suspected; consult your local pharmacist/doctor."
 
 Output format: STRICT JSON matching this schema:
-{
+{{
   "triage_level": "EMERGENCY" | "URGENT" | "ROUTINE",
-  "triage_label_hi": "आपातकालीन स्थिति (तत्काल अस्पताल जाएं)" | "त्वरित चिकित्सा परामर्श (24 घंटे में डॉक्टर को दिखाएं)" | "सामान्य परामर्श (नियमित जांच)",
-  "patient_summary": "1-2 sentence plain Hindi summary of the problem presented",
+  "triage_label_hi": "Triage label and urgency level written in {language}",
+  "patient_summary": "1-2 sentence plain summary of the problem presented in {language}",
   "differential_diagnoses": [
-    {
-      "condition": "Condition name in Hindi (English)",
-      "likelihood": "उच्च (High)" | "मध्यम (Moderate)" | "संभावित (Possible)",
-      "clinical_reasoning": "Plain Hindi explanation of why symptoms match this condition"
-    }
+    {{
+      "condition": "Condition name in {language} (English medical name in brackets if helpful)",
+      "likelihood": "High / Moderate / Possible written in {language}",
+      "clinical_reasoning": "Plain explanation in {language} of why symptoms match this condition"
+    }}
   ],
   "safe_pain_relief": [
-    {
-      "medicine_or_remedy": "Name of safe medicine or natural remedy (e.g., पैरासिटामोल 500mg / ORS घोल / सिकाई)",
-      "purpose": "किस दर्द या परेशानी से राहत के लिए",
-      "dosage_and_instructions": "खाने के बाद, सुरक्षित अंतराल (जैसे 6-8 घंटे में आवश्यकतानुसार)",
-      "safety_caution": "सावधानी (खाली पेट न लें, लीवर/किडनी समस्या में डॉक्टर से पूछें)"
-    }
+    {{
+      "medicine_or_remedy": "Name of safe medicine or natural remedy in {language}",
+      "purpose": "Purpose / relief target in {language}",
+      "dosage_and_instructions": "Clear dosage timing and food instructions in {language}",
+      "safety_caution": "Safety caution and contraindications in {language}"
+    }}
   ],
   "red_flag_symptoms": [
-    "Red-flag symptom 1 in Hindi",
-    "Red-flag symptom 2 in Hindi"
+    "Red-flag symptom 1 in {language}",
+    "Red-flag symptom 2 in {language}"
   ],
   "recommended_tests": [
-    "Test 1 to ask the doctor for (e.g., अल्ट्रासाउंड / Blood Test)",
-    "Test 2"
+    "Test 1 in {language} to ask the doctor for",
+    "Test 2 in {language}"
   ],
   "home_care_and_precautions": [
-    "Safe comfort measure or precaution (e.g., पानी की पर्याप्त मात्रा लें)"
+    "Safe comfort measure or precaution in {language}"
   ],
-  "spoken_explanation": "A natural, conversational 3-4 sentence spoken summary by the doctor in the requested language explaining the situation calmly, what might be happening, safe mild relief measures, and whether they need to go to the hospital immediately. (NOTE: For Sindhi, Urdu, or Kashmiri, write in Devanagari script so Indic TTS engines speak the native words smoothly)."
-}
+  "spoken_explanation": "A natural, conversational 3-4 sentence spoken summary by the doctor in {language} explaining the situation calmly, what might be happening, safe mild relief measures, and whether they need to go to the hospital immediately."
+}}
 """
 
 
@@ -95,17 +102,25 @@ def diagnose_symptoms(
 ) -> Dict[str, Any]:
     """
     Evaluates patient symptoms, generates structured differential diagnosis,
-    and synthesizes doctor audio explanation in Bulbul v3.
+    and synthesizes doctor audio explanation in Bulbul v3 in the user's SELECTED language.
     """
     client = _get_client()
 
-    messages = [{"role": "system", "content": DIAGNOSTIC_SYSTEM_PROMPT}]
+    system_prompt = build_diagnostic_system_prompt(language)
+    messages = [{"role": "system", "content": system_prompt}]
     if conversation_history:
         messages.extend(conversation_history)
 
     messages.append({
         "role": "user",
-        "content": f"Language: {language}\nPatient Reported Problem / Symptoms:\n\"{user_symptoms}\"\n\nProvide the clinical diagnostic assessment in strict JSON."
+        "content": (
+            f"SELECTED TARGET LANGUAGE: {language}\n"
+            f"(STRICT MANDATE: The user may have typed or spoken their symptoms in English, Hindi, or another language below. "
+            f"You MUST completely ignore the input language and provide 100% of your clinical diagnosis, explanations, triage, "
+            f"safe pain relief guidance, and spoken text strictly in {language}.)\n\n"
+            f"Patient Reported Problem / Symptoms:\n\"{user_symptoms}\"\n\n"
+            f"Provide the complete clinical diagnostic assessment strictly in {language} in valid JSON matching the schema."
+        )
     })
 
     response = client.chat.completions(
@@ -116,7 +131,7 @@ def diagnose_symptoms(
     raw_json = response.choices[0].message.content.strip()
     assessment = json_repair.loads(raw_json)
 
-    # Synthesize spoken voice explanation via Bulbul v3
+    # Synthesize spoken voice explanation via Bulbul v3 in the selected language
     spoken_text = assessment.get("spoken_explanation", "")
     audio_base64 = None
     if spoken_text:
@@ -135,18 +150,6 @@ def diagnose_symptoms(
     return assessment
 
 
-FOLLOWUP_SYSTEM_PROMPT = """You are Dr. AI, an empathetic, highly qualified clinical physician in India in an interactive consultation chat with your patient.
-You already performed the initial symptom evaluation and formulated differential diagnoses and safe care plans.
-The patient is now asking follow-up questions to understand their diagnosis, recovery steps, medications, home remedies, dietary precautions, or any new symptoms.
-
-CLINICAL CONSULTATION PRINCIPLES:
-1. Speak warmly, respectfully, and conversationally in empathetic Hindi (or the patient's preferred language).
-2. Answer the specific question directly, giving actionable and medically accurate advice.
-3. If they describe new red-flag warning signs (e.g., chest pain, shortness of breath, blood, fainting), alert them clearly to seek emergency care.
-4. Keep each response concise and easy to understand (2 to 4 sentences). Do not output JSON; output natural doctor dialogue.
-"""
-
-
 def diagnose_followup(
     history: List[Dict[str, str]],
     user_message: str,
@@ -154,7 +157,7 @@ def diagnose_followup(
     language: str = "Hindi"
 ) -> Dict[str, Any]:
     """
-    Continues conversational consultation between patient and Dr. AI.
+    Continues conversational consultation between patient and Dr. AI in the user's SELECTED language.
     """
     client = _get_client()
 
@@ -171,10 +174,15 @@ def diagnose_followup(
             f"Initial AI Diagnosis & Triage: {initial_diag}\n"
         )
 
-    system_content = FOLLOWUP_SYSTEM_PROMPT
+    system_content = f"""You are Dr. AI, an empathetic, highly qualified clinical physician in India in an interactive consultation chat with your patient.
+You already performed the initial symptom evaluation and formulated differential diagnoses and safe care plans.
+The patient is now asking follow-up questions to understand their diagnosis, recovery steps, medications, home remedies, dietary precautions, or any new symptoms.
+
+MANDATORY TARGET LANGUAGE: {language}
+(STRICT INSTRUCTION: The patient may ask their follow-up question in English, Hindi, or any language. Regardless of what language they ask in, YOUR REPLY MUST BE 100% IN {language}. Answer warmly, concisely, and medically accurately in 2-4 sentences in {language}. Do not output JSON; output natural doctor dialogue in {language}.)
+"""
     if context_str:
         system_content += f"\nPATIENT CLINICAL CONTEXT:\n{context_str}"
-    system_content += f"\nConsultation Language: {language}"
 
     messages = [{"role": "system", "content": system_content}]
     if history:
@@ -184,7 +192,10 @@ def diagnose_followup(
             if role in ["user", "assistant"] and content:
                 messages.append({"role": role, "content": content})
 
-    messages.append({"role": "user", "content": user_message})
+    messages.append({
+        "role": "user",
+        "content": f"[Reply strictly in {language}]\n{user_message}"
+    })
 
     try:
         response = client.chat.completions(
@@ -195,11 +206,10 @@ def diagnose_followup(
     except Exception as e:
         print(f"[diagnoser-followup] Chat completion error: {e}")
         reply_text = (
-            "हाँ, आप अपनी सेहत के अनुसार हल्का और सुपाच्य भोजन ले सकते हैं। "
-            "कृपया पर्याप्त आराम करें, पर्याप्त पानी पिएं और अगर कोई नया गंभीर लक्षण दिखाई दे तो तुरंत डॉक्टर से संपर्क करें।"
+            "Please take adequate rest, stay hydrated, and consult your doctor immediately if any severe symptoms appear."
         )
 
-    # Synthesize doctor speech via Bulbul v3
+    # Synthesize doctor speech via Bulbul v3 in the selected language
     audio_base64 = None
     try:
         audio_bytes = speak_turn(

@@ -611,6 +611,14 @@ HTML_CONTENT = """<!DOCTYPE html>
         Tell the AI what you are feeling. It will formulate a <strong>differential diagnosis, triage level, and safe low-risk pain relief guidance</strong> tailored to your age and gender.
       </p>
 
+      <!-- Language Disclaimer Notice -->
+      <div style="background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.35); padding: 9px 14px; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 20px;">🌐</span>
+        <div style="font-size: 12.5px; color: #93c5fd; line-height: 1.45;">
+          <strong>Language Disclaimer:</strong> Your clinical diagnostic assessment, safe pain relief guidance, and doctor audio will always be given strictly in your selected language (<strong id="diag-selected-lang-notice" style="color: #60a5fa; text-decoration: underline;">Hindi</strong>), regardless of what language you type or speak your symptoms in. <em>(You can change your preferred language in the patient details above anytime).</em>
+        </div>
+      </div>
+
       <textarea id="diag-input" class="symptom-textarea" placeholder="उदाहरण: मुझे 2 दिन से सिर में तेज दर्द और बुखार है, क्या मैं कोई सुरक्षित दवाई ले सकता हूँ जिससे दर्द में राहत मिले? (Or describe in English)..."></textarea>
 
       <!-- Quick Preset Symptom Chips -->
@@ -1166,6 +1174,8 @@ function updatePatientPillsUI() {
   if (histName) histName.innerText = activePatient.name || 'Patient';
   const t1HistName = document.getElementById('tab1-history-patient-name');
   if (t1HistName) t1HistName.innerText = activePatient.name || 'Patient';
+  const langNotice = document.getElementById('diag-selected-lang-notice');
+  if (langNotice) langNotice.innerText = activePatient.language || 'Hindi';
 }
 
 // ── CLIENT-SIDE STORAGE & PROFILE MANAGEMENT ────────────────────────────────
@@ -1724,6 +1734,8 @@ function updateProfileBadge() {
   const tab3Demo = document.getElementById('tab3-patient-demo');
   const tab3Lang = document.getElementById('tab3-patient-lang');
   const confirmChip = document.getElementById('preset-reply-confirm');
+  const langNotice = document.getElementById('diag-selected-lang-notice');
+  if (langNotice) langNotice.innerText = lang || 'Hindi';
 
   if (name && age && gender) {
     if (badge) {
@@ -2032,6 +2044,11 @@ function renderDiagnosis(data) {
             🔄 New Consultation
           </button>
         </div>
+      </div>
+
+      <!-- Selected Language Delivery Banner -->
+      <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); padding: 8px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 12.5px; color: #a7f3d0; display:flex; align-items:center; gap:8px;">
+        <span>🌐</span> <span>Clinical diagnosis, triage, and safe pain relief delivered strictly in your selected language: <strong style="color:#fff;">${escapeHtml((getStoredProfile().language || 'Hindi'))}</strong></span>
       </div>
 
       <!-- ════════════════════════════════════════════════════════════════ -->
@@ -2764,8 +2781,27 @@ async function toggleSlotVoice(btn, speechText) {
   stopAllActiveAudio();
 
   const profile = getStoredProfile();
-  if (!speechText) speechText = "नमस्ते, यह आपकी दवाई लेने का समय है।";
   const lang = profile.language || 'Hindi';
+  const langLower = lang.toLowerCase();
+
+  if (!speechText) {
+    const defaultReminders = {
+      'sindhi': 'नमस्ते, ही तव्हांजी दवाई वठण जो वक़्त आहे। मेहरबानी करे दवाई वठो।',
+      'marathi': 'नमस्कार, ही तुमची औषध घेण्याची वेळ झाली आहे. कृपया औषध वेळेवर घ्या.',
+      'bengali': 'নমস্কার, এটি আপনার ওষুধ খাওয়ার সময়। দয়া করে ওষুধটি খান।',
+      'telugu': 'నమస్కారం, ఇది మీ మందులు వేసుకునే సమయం. దయచేసి మందులు తీసుకోండి.',
+      'tamil': 'வணக்கம், இது உங்கள் மருந்து எடுத்துக்கொள்ளும் நேரம். தயவுசெய்து மருந்தை உட்கொள்ளுங்கள்.',
+      'gujarati': 'નમસ્તે, આ તમારી દવા લેવાનો સમય થઈ ગયો છે. કૃપા કરીને દવા લો.',
+      'kannada': 'ನಮಸ್ಕಾರ, ಇದು ನಿಮ್ಮ ಔಷಧಿ ತೆಗೆದುಕೊಳ್ಳುವ ಸಮಯ. ದಯವಿಟ್ಟು ಔಷಧಿ ತೆಗೆದುಕೊಳ್ಳಿ.',
+      'malayalam': 'നമസ്കാരം, ഇത് നിങ്ങളുടെ മരുന്ന് കഴിക്കാനുള്ള സമയമാണ്. ദയവായി മരുന്ന് കഴിക്കുക.',
+      'punjabi': 'ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ, ਇਹ ਤੁਹਾਡੀ ਦਵਾਈ ਲੈਣ ਦਾ ਸਮਾਂ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਦਵਾਈ ਲਓ।',
+      'odia': 'ନମସ୍କାର, ଏହା ଆପଣଙ୍କର ଔଷଧ ଖାଇବାର ସମୟ। ଦୟାକରି ଔଷଧ ନିଅନ୍ତୁ।',
+      'urdu': 'आदाब, यह आपकी दवाई लेने का वक़्त है। बराए मेहरबानी दवाई लें।',
+      'english': 'Hello, it is time to take your prescribed medication. Please take your dose now.',
+      'hindi': 'नमस्ते, यह आपकी दवाई लेने का समय है। कृपया समय पर दवाई लें।'
+    };
+    speechText = defaultReminders[langLower] || 'Please take your prescribed medication on time.';
+  }
 
   btn.disabled = true;
   btn.innerHTML = '<span>⏳</span> <span>Generating voice...</span>';
@@ -2874,6 +2910,18 @@ async function toggleAllTimetableAudio() {
 
     const langLower = (lang || 'hindi').toLowerCase();
     const localizedTemplates = {
+      'sindhi': {
+        greeting: `नमस्ते ${name}, ही तव्हांजो अजु जो सभनी दवाइयून जो टाईमटेबल आहे। `,
+        closure: ` मेहरबानी करे सभ दवाईउं वक़्त ते वठो ऐं तव्हांजी सेहत जो ख्याल रखजो। मेहरबानी।`
+      },
+      'urdu': {
+        greeting: `आदाब ${name} साहिब, यह आपका आज की तमाम दवाइयों का मुकम्मल शिड्यूल है। `,
+        closure: ` बराए मेहरबानी तमाम दवाइयां वक़्त पर लें और अपनी सेहत का ख्याल रखें। शुक्रिया।`
+      },
+      'kashmiri': {
+        greeting: `नमस्कार ${name}, यी छु चुहंदि अज़ुक पूर दवाइयन हुंद वक़्त-पत्र। `,
+        closure: ` मेहरबानी करित्ह सार्य दवाइय वक़्तस प्यठ ख्यिव त पानस नज़र थ्यिव। शुक्रिया।`
+      },
       'marathi': {
         greeting: `नमस्कार ${name}जी, हा तुमचा आजचा संपूर्ण औषधांचा वेळापत्रक आहे. `,
         closure: ` कृपया सर्व औषधे वेळेवर घ्या आणि स्वतःची काळजी घ्या. धन्यवाद.`
@@ -2914,13 +2962,40 @@ async function toggleAllTimetableAudio() {
         greeting: `ନମସ୍କାର ${name}ଜୀ, ଏହା ଆପଣଙ୍କର ଆଜିର ଔଷଧ ସମୟସୂଚୀ। `,
         closure: ` ଦୟାକରି ସମସ୍ତ ଔଷଧ ଠିକ୍ ସମୟରେ ନିଅନ୍ତୁ। ଧନ୍ୟବାଦ।`
       },
+      'assamese': {
+        greeting: `নমস্কাৰ ${name}, এয়া হৈছে আপোনাৰ আজিৰ ঔষধৰ সময়সূচী। `,
+        closure: ` অনুগ্ৰহ কৰি সকলো ঔষধ সময়মতে খাব আৰু নিজৰ যত্ন লব। ধন্যবাদ।`
+      },
+      'maithili': {
+        greeting: `प्रणाम ${name} जी, ई अहाँक आइ केर संपूर्ण दवाईक समय-सारणी अछि। `,
+        closure: ` कृपा कऽ सब दवाई समय पर लिअऽ आ अपन ध्यान राखब। धन्यवाद।`
+      },
+      'nepali': {
+        greeting: `नमस्ते ${name} जी, यो तपाईंको आजको सम्पूर्ण औषधीको तालिका हो। `,
+        closure: ` कृपया सबै औषधीहरू समयमा लिनुहोस् र आफ्नो ख्याल राख्नुहोस्। धन्यवाद।`
+      },
+      'konkani': {
+        greeting: `नमस्कार ${name}, हो तुमचो आयचो वखदांचो वेळापत्रक आसा। `,
+        closure: ` उपकार करून सगळीं वखदां वेळार घियात। देव बरें करूं।`
+      },
+      'dogri': {
+        greeting: `नमस्ते ${name} जी, एह् थुआह्ड़ा अज्जै दा दवाईयां दा पूरा समां-सारणी ऐ। `,
+        closure: ` कृपा करियै सारियां दवाईयां बकत पर लेओ। धनबाद।`
+      },
+      'sanskrit': {
+        greeting: `नमस्ते ${name}, इदं भवतः अद्यतनं सम्पूर्णम् औषध-समयसारणी अस्ति। `,
+        closure: ` कृपया सर्वाणि औषधानि समये स्वीकुर्वन्तु। धन्यवादाः।`
+      },
       'english': {
         greeting: `Hello ${name}, here is your complete medication schedule for today. `,
         closure: ` Please take all medications on time as directed. Thank you.`
       }
     };
 
-    const tpl = localizedTemplates[langLower] || localizedTemplates['hindi'];
+    const tpl = localizedTemplates[langLower] || {
+      greeting: `Hello ${name}, `,
+      closure: ` Please take all medications on time as directed. Thank you.`
+    };
     if (speechSnippets.length > 0) {
       scheduleSpeech = tpl.greeting + speechSnippets.join(' ') + tpl.closure;
     } else {
