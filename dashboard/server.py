@@ -444,6 +444,32 @@ HTML_CONTENT = """<!DOCTYPE html>
       font-weight: 600;
       box-shadow: 0 0 12px rgba(124, 58, 237, 0.45);
     }
+    .patient-pill {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .patient-pill:hover {
+      background: rgba(99, 102, 241, 0.25);
+      border-color: rgba(99, 102, 241, 0.5);
+      color: #fff;
+    }
+    .patient-pill.active {
+      background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
+      border-color: #818cf8;
+      color: #fff;
+      font-weight: 700;
+      box-shadow: 0 0 12px rgba(99, 102, 241, 0.5);
+    }
 
     @media (max-width: 768px) {
       body { padding: 12px; }
@@ -467,6 +493,22 @@ HTML_CONTENT = """<!DOCTYPE html>
   <!-- MANDATORY PATIENT INTAKE FORM (DEVICE-SPECIFIC & USER INTERACTIVE)   -->
   <!-- ════════════════════════════════════════════════════════════════════ -->
   <div class="patient-intake-card">
+    <!-- Active Patient Profile Switcher Bar -->
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid rgba(99, 102, 241, 0.25);">
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <span style="font-size:13px; font-weight:700; color:#a5b4fc;">👥 Select Patient Profile:</span>
+        <div id="patient-pills-container" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button type="button" class="btn btn-purple" onclick="createNewPatient()" style="padding: 5px 12px; font-size: 11.5px; display:inline-flex; align-items:center; gap:5px;">
+          <span>➕</span> <span>New Patient</span>
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="deleteActivePatient()" style="padding: 5px 10px; font-size: 11.5px; color:#f87171;" title="Delete currently selected patient">
+          <span>🗑️</span> <span>Delete Patient</span>
+        </button>
+      </div>
+    </div>
+
     <div class="intake-header">
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="font-size:22px;">👤</span>
@@ -547,6 +589,19 @@ HTML_CONTENT = """<!DOCTYPE html>
   <!-- ════════════════════════════════════════════════════════════════════ -->
   <div id="tab-diagnose">
     <div class="card" id="diag-input-card">
+      <!-- Active Patient Context Row for Tab 1 -->
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(96, 165, 250, 0.25); padding: 8px 14px; border-radius: 8px; margin-bottom: 14px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:13px; color:#93c5fd; font-weight:700;">👤 Consulting for Patient:</span>
+          <span id="tab1-active-patient-badge" style="font-size:13px; font-weight:700; color:#fff;">Priya Sharma (24 Y, Female • Hindi)</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:12px; color:#94a3b8;">Switch Patient:</span>
+          <select id="tab1-patient-select" class="form-input" style="width:auto; padding:3px 10px; font-size:12px; margin:0;" onchange="switchActivePatient(this.value)">
+          </select>
+        </div>
+      </div>
+
       <div class="card-header">
         <h2>🩺 State Your Symptoms or Medical Problem</h2>
         <span class="badge" style="color: #60a5fa;">Sarvam-105B Clinical Engine</span>
@@ -581,6 +636,20 @@ HTML_CONTENT = """<!DOCTYPE html>
 
     <!-- Diagnostic Result Container -->
     <div id="diag-result-container" style="display:none;"></div>
+
+    <!-- Tab 1 Past Diagnoses History Section -->
+    <div class="card" id="tab1-history-card" style="margin-top: 18px; border: 1px solid rgba(96, 165, 250, 0.25); background: rgba(15, 23, 42, 0.65);">
+      <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <h2>📜 Previous Consultations (<span id="tab1-history-patient-name" style="color:#60a5fa;">Priya Sharma</span>)</h2>
+          <span class="badge" id="tab1-history-count-badge" style="background:rgba(96, 165, 250, 0.2); color:#93c5fd;">0 Checks</span>
+        </div>
+        <button class="btn btn-secondary" onclick="clearAllDiagnosesForActivePatient()" style="padding: 4px 10px; font-size: 11px; color:#f87171;" title="Clear all previous symptom checks for this patient">
+          🗑️ Clear Diagnoses
+        </button>
+      </div>
+      <div id="tab1-history-list"></div>
+    </div>
   </div>
 
   <!-- ════════════════════════════════════════════════════════════════════ -->
@@ -589,6 +658,18 @@ HTML_CONTENT = """<!DOCTYPE html>
   <div id="tab-prescription" style="display:none;">
     <!-- Multi-Prescription Switcher Bar -->
     <div id="rx-switcher-tab2" style="display:none; margin-bottom: 20px; background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(124, 58, 237, 0.35); padding: 14px 18px; border-radius: 12px;">
+      <!-- Active Patient Context Indicator in Tab 2 -->
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid rgba(124, 58, 237, 0.25);">
+        <div style="font-size:13px; color:#c4b5fd;">
+          📁 Prescriptions for Patient: <strong id="tab2-patient-name" style="color:#fff;">Priya Sharma</strong>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:12px; color:#94a3b8;">Switch Patient:</span>
+          <select id="tab2-patient-select" class="form-input" style="width:auto; padding:3px 8px; font-size:12px; margin:0;" onchange="switchActivePatient(this.value)">
+          </select>
+        </div>
+      </div>
+
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <span style="font-size:14px; color:#c4b5fd; font-weight:700;">📂 Prescriptions:</span>
@@ -722,6 +803,17 @@ HTML_CONTENT = """<!DOCTYPE html>
           </div>
         </div>
 
+        <!-- Patient Context Selector in Tab 3 -->
+        <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(59, 130, 246, 0.3); padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:12.5px; color:#60a5fa; font-weight:700;">👤 Patient on Call:</span>
+            <select id="tab3-patient-select" class="form-input" style="padding: 4px 10px; font-size: 12px; width:auto; max-width:240px; margin:0;" onchange="switchActivePatient(this.value)">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+          <div style="font-size:11.5px; color:#94a3b8;" id="tab3-patient-summary-pill">24 Y, Female • Hindi</div>
+        </div>
+
         <!-- Prescription Context Selector in Tab 3 -->
         <div id="tab3-rx-selector-bar" style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(59, 130, 246, 0.3); padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
           <div style="display:flex; align-items:center; gap:8px;">
@@ -789,6 +881,30 @@ HTML_CONTENT = """<!DOCTYPE html>
         </div>
       </div>
     </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════ -->
+    <!-- PREVIOUS TALKS & INTERACTION HISTORY                               -->
+    <!-- ════════════════════════════════════════════════════════════════════ -->
+    <div class="card" id="interaction-history-card" style="margin-top:24px; border: 1px solid rgba(59, 130, 246, 0.35); background: linear-gradient(180deg, #131b2e 0%, #0f172a 100%);">
+      <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <h2>📜 Previous Talks & Call History (<span id="history-patient-name" style="color:#60a5fa;">Priya Sharma</span>)</h2>
+          <span class="badge" id="history-count-badge" style="background:rgba(59, 130, 246, 0.2); color:#93c5fd;">0 Talks</span>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn btn-secondary" onclick="clearAllTalksForActivePatient()" style="padding: 5px 12px; font-size: 11.5px; color:#f87171;" title="Delete all saved talks for this patient">
+            <span>🗑️</span> <span>Clear All Talks</span>
+          </button>
+        </div>
+      </div>
+      <p style="font-size: 12.5px; color: #94a3b8; margin-bottom: 14px;">
+        All completed outbound voice follow-up check-ins with the AI companion are recorded here for this patient. You can expand any session to read the full dialogue, review clinical alerts, or delete recordings.
+      </p>
+
+      <div id="patient-talks-list">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
   </div>
 </div>
 
@@ -820,46 +936,279 @@ var isDiagChatRecording = false;
 var diagChatMediaRecorder = null;
 var diagChatAudioChunks = [];
 
+// ── MULTI-PATIENT MANAGEMENT & INTERACTION HISTORY STORE ───────────────────
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function initPatientsStore() {
+  let patients = [];
+  try {
+    const raw = localStorage.getItem('sarvam_patients_list');
+    if (raw) patients = JSON.parse(raw);
+  } catch (e) {
+    patients = [];
+  }
+
+  if (!Array.isArray(patients) || patients.length === 0) {
+    let legacyProfile = null;
+    let legacyPrescriptions = [];
+    let legacyRxId = null;
+    try {
+      const pRaw = localStorage.getItem('sarvam_patient_profile');
+      if (pRaw) legacyProfile = JSON.parse(pRaw);
+      const rxRaw = localStorage.getItem('sarvam_prescriptions');
+      if (rxRaw) legacyPrescriptions = JSON.parse(rxRaw);
+      legacyRxId = localStorage.getItem('sarvam_active_rx_id');
+    } catch (e) {}
+
+    const firstPatient = {
+      id: 'pat_' + Date.now(),
+      name: (legacyProfile && legacyProfile.name) ? legacyProfile.name : 'Priya Sharma',
+      age: (legacyProfile && legacyProfile.age) ? legacyProfile.age : '24',
+      gender: (legacyProfile && legacyProfile.gender) ? legacyProfile.gender : 'Female',
+      language: (legacyProfile && legacyProfile.language) ? legacyProfile.language : 'Hindi',
+      prescriptions: Array.isArray(legacyPrescriptions) ? legacyPrescriptions : [],
+      active_rx_id: legacyRxId || (legacyPrescriptions[0] ? legacyPrescriptions[0].id : null),
+      interaction_history: [],
+      diagnoses_history: []
+    };
+    patients = [firstPatient];
+    localStorage.setItem('sarvam_patients_list', JSON.stringify(patients));
+    localStorage.setItem('sarvam_active_patient_id', firstPatient.id);
+  }
+
+  let activeId = localStorage.getItem('sarvam_active_patient_id');
+  if (!activeId || !patients.some(p => p.id === activeId)) {
+    activeId = patients[0].id;
+    localStorage.setItem('sarvam_active_patient_id', activeId);
+  }
+  return patients;
+}
+
+function getAllPatients() {
+  return initPatientsStore();
+}
+
+function saveAllPatients(patients) {
+  try {
+    localStorage.setItem('sarvam_patients_list', JSON.stringify(patients));
+  } catch (e) {}
+}
+
+function getActivePatient() {
+  const list = getAllPatients();
+  const activeId = localStorage.getItem('sarvam_active_patient_id');
+  const found = list.find(p => p.id === activeId);
+  if (found) return found;
+  return list[0] || {
+    id: 'pat_default',
+    name: 'Patient',
+    age: '25',
+    gender: 'Other',
+    language: 'Hindi',
+    prescriptions: [],
+    active_rx_id: null,
+    interaction_history: [],
+    diagnoses_history: []
+  };
+}
+
+function saveActivePatient(patient) {
+  const list = getAllPatients();
+  const idx = list.findIndex(p => p.id === patient.id);
+  if (idx >= 0) {
+    list[idx] = patient;
+  } else {
+    list.push(patient);
+  }
+  saveAllPatients(list);
+}
+
+function createNewPatient() {
+  const list = getAllPatients();
+  const newNum = list.length + 1;
+  const newId = 'pat_' + Date.now();
+  const newPatient = {
+    id: newId,
+    name: `Patient #${newNum}`,
+    age: '',
+    gender: '',
+    language: 'Hindi',
+    prescriptions: [],
+    active_rx_id: null,
+    interaction_history: [],
+    diagnoses_history: []
+  };
+  list.push(newPatient);
+  saveAllPatients(list);
+  switchActivePatient(newId);
+  const nameInput = document.getElementById('patient-name-input');
+  if (nameInput) {
+    nameInput.focus();
+    nameInput.select();
+  }
+}
+
+function deleteActivePatient() {
+  let list = getAllPatients();
+  const active = getActivePatient();
+  if (!confirm(`Are you sure you want to delete patient "${active.name || 'Current Patient'}" along with all their prescriptions and talk history?`)) {
+    return;
+  }
+  list = list.filter(p => p.id !== active.id);
+  if (list.length === 0) {
+    const fresh = {
+      id: 'pat_' + Date.now(),
+      name: 'Patient #1',
+      age: '',
+      gender: '',
+      language: 'Hindi',
+      prescriptions: [],
+      active_rx_id: null,
+      interaction_history: [],
+      diagnoses_history: []
+    };
+    list = [fresh];
+  }
+  saveAllPatients(list);
+  switchActivePatient(list[0].id);
+}
+
+function switchActivePatient(patientId) {
+  if (!patientId) return;
+  localStorage.setItem('sarvam_active_patient_id', patientId);
+  const patient = getActivePatient();
+
+  const nameEl = document.getElementById('patient-name-input');
+  if (nameEl) nameEl.value = patient.name || '';
+  const ageEl = document.getElementById('patient-age-input');
+  if (ageEl) ageEl.value = patient.age || '';
+  const genEl = document.getElementById('patient-gender-input');
+  if (genEl) genEl.value = patient.gender || '';
+  const langEl = document.getElementById('patient-lang-input');
+  if (langEl) langEl.value = patient.language || 'Hindi';
+
+  // Reset live call window if not recording
+  if (!compMediaRecorder || compMediaRecorder.state !== 'recording') {
+    callHistory = [];
+    const tab3CallWindow = document.getElementById('call-window');
+    if (tab3CallWindow) {
+      tab3CallWindow.innerHTML = `
+        <div class="chat-bubble chat-agent">
+          <div class="bubble-speaker"><span>🤖 Hospital Care Agent (Bulbul v3)</span></div>
+          <div>Click <strong>"Start Outbound Call"</strong> to receive the call for <strong>${escapeHtml(patient.name || 'this patient')}</strong>. The agent will greet them in <strong>${escapeHtml(patient.language || 'Hindi')}</strong>, review their prescribed medicines, and you can speak directly into your microphone!</div>
+        </div>
+      `;
+    }
+  }
+
+  updatePatientPillsUI();
+  updateProfileBadge();
+  updatePrescriptionUI();
+  renderPatientTalksUI();
+  renderPatientDiagnosesUI();
+}
+
+function updatePatientPillsUI() {
+  const list = getAllPatients();
+  const activeId = localStorage.getItem('sarvam_active_patient_id');
+  const container = document.getElementById('patient-pills-container');
+  if (container) {
+    container.innerHTML = list.map(p => {
+      const isActive = p.id === activeId;
+      const displayName = p.name ? p.name : 'Unnamed Patient';
+      const tag = (p.age && p.gender) ? `${p.age}Y, ${p.gender.charAt(0)}` : (p.language || 'Profile');
+      const cls = isActive ? 'patient-pill active' : 'patient-pill';
+      return `<button type="button" class="${cls}" onclick="switchActivePatient('${p.id}')">
+        <span>${isActive ? '●' : '○'}</span>
+        <span>${escapeHtml(displayName)}</span>
+        <span style="opacity: 0.75; font-size: 11px;">(${escapeHtml(tag)})</span>
+      </button>`;
+    }).join('');
+  }
+
+  const activePatient = getActivePatient();
+  const optionsHtml = list.map(p => {
+    const isSel = p.id === activeId ? 'selected' : '';
+    const dName = p.name || 'Unnamed';
+    const dInfo = (p.age && p.gender) ? `${p.age}Y/${p.gender}` : (p.language || 'Hindi');
+    return `<option value="${p.id}" ${isSel}>👤 ${escapeHtml(dName)} (${escapeHtml(dInfo)})</option>`;
+  }).join('');
+
+  const t1Select = document.getElementById('tab1-patient-select');
+  if (t1Select) t1Select.innerHTML = optionsHtml;
+  const t1Badge = document.getElementById('tab1-active-patient-badge');
+  if (t1Badge) {
+    const demo = (activePatient.age && activePatient.gender) ? `${activePatient.age} Y, ${activePatient.gender}` : '';
+    t1Badge.innerText = `${activePatient.name || 'Patient'}${demo ? ' (' + demo + ' • ' + (activePatient.language || 'Hindi') + ')' : ''}`;
+  }
+
+  const t2Select = document.getElementById('tab2-patient-select');
+  if (t2Select) t2Select.innerHTML = optionsHtml;
+  const t2Name = document.getElementById('tab2-patient-name');
+  if (t2Name) t2Name.innerText = activePatient.name || 'Patient';
+
+  const t3Select = document.getElementById('tab3-patient-select');
+  if (t3Select) t3Select.innerHTML = optionsHtml;
+  const t3Summary = document.getElementById('tab3-patient-summary-pill');
+  if (t3Summary) {
+    t3Summary.innerText = `${activePatient.age || '25'} Y, ${activePatient.gender || 'Other'} • ${activePatient.language || 'Hindi'}`;
+  }
+
+  const histName = document.getElementById('history-patient-name');
+  if (histName) histName.innerText = activePatient.name || 'Patient';
+  const t1HistName = document.getElementById('tab1-history-patient-name');
+  if (t1HistName) t1HistName.innerText = activePatient.name || 'Patient';
+}
+
 // ── CLIENT-SIDE STORAGE & PROFILE MANAGEMENT ────────────────────────────────
 function getStoredProfile() {
-  try {
-    const raw = localStorage.getItem('sarvam_patient_profile');
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  return { name: '', age: '', gender: '', language: 'Hindi' };
+  const patient = getActivePatient();
+  return {
+    name: patient.name || '',
+    age: patient.age || '',
+    gender: patient.gender || '',
+    language: patient.language || 'Hindi'
+  };
 }
 
 function saveStoredProfile(p) {
-  try {
-    localStorage.setItem('sarvam_patient_profile', JSON.stringify(p));
-  } catch (e) {}
+  const patient = getActivePatient();
+  patient.name = p.name;
+  patient.age = p.age;
+  patient.gender = p.gender;
+  patient.language = p.language;
+  saveActivePatient(patient);
 }
 
 // ── MULTI-PRESCRIPTION MANAGEMENT & STORAGE ─────────────────────────────────
 function getStoredPrescriptions() {
-  try {
-    const raw = localStorage.getItem('sarvam_prescriptions');
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  return [];
+  const patient = getActivePatient();
+  return Array.isArray(patient.prescriptions) ? patient.prescriptions : [];
 }
 
 function saveStoredPrescriptions(list) {
-  try {
-    localStorage.setItem('sarvam_prescriptions', JSON.stringify(list));
-  } catch (e) {}
+  const patient = getActivePatient();
+  patient.prescriptions = list;
+  saveActivePatient(patient);
 }
 
 function getActiveRxId() {
-  return localStorage.getItem('sarvam_active_rx_id') || null;
+  const patient = getActivePatient();
+  return patient.active_rx_id || null;
 }
 
 function setActiveRxId(id) {
-  if (id) {
-    localStorage.setItem('sarvam_active_rx_id', id);
-  } else {
-    localStorage.removeItem('sarvam_active_rx_id');
-  }
+  const patient = getActivePatient();
+  patient.active_rx_id = id || null;
+  saveActivePatient(patient);
   updatePrescriptionUI();
 }
 
@@ -924,11 +1273,257 @@ function deleteActivePrescription() {
 }
 
 function clearAllPrescriptions() {
-  if (!confirm("Are you sure you want to clear all saved prescriptions? Outbound check-in call will be disabled until you upload a new one.")) return;
+  const patient = getActivePatient();
+  const list = getStoredPrescriptions();
+  if (list.length === 0) {
+    alert("There are no saved prescriptions to clear.");
+    return;
+  }
+  if (!confirm(`Are you sure you want to clear all saved prescriptions for ${patient.name || 'this patient'}? Outbound check-in call will be disabled until you upload a new one.`)) return;
   saveStoredPrescriptions([]);
   setActiveRxId(null);
-  localStorage.removeItem('sarvam_patient_timetable');
   updatePrescriptionUI();
+}
+
+// ── INTERACTION HISTORY (PREVIOUS TALKS) METHODS ─────────────────────────────
+function getActivePatientTalks() {
+  const patient = getActivePatient();
+  return Array.isArray(patient.interaction_history) ? patient.interaction_history : [];
+}
+
+function saveActivePatientTalks(talks) {
+  const patient = getActivePatient();
+  patient.interaction_history = talks;
+  saveActivePatient(patient);
+}
+
+function addTalkToActivePatient(talkRecord) {
+  const talks = getActivePatientTalks();
+  talks.unshift(talkRecord);
+  saveActivePatientTalks(talks);
+  renderPatientTalksUI();
+}
+
+function deleteTalkFromActivePatient(talkId) {
+  if (!confirm("Are you sure you want to delete this previous talk?")) return;
+  let talks = getActivePatientTalks();
+  talks = talks.filter(t => t.id !== talkId);
+  saveActivePatientTalks(talks);
+  renderPatientTalksUI();
+}
+
+function clearAllTalksForActivePatient() {
+  const patient = getActivePatient();
+  const talks = getActivePatientTalks();
+  if (talks.length === 0) {
+    alert("No talks to delete for this patient.");
+    return;
+  }
+  if (!confirm(`Are you sure you want to delete all previous talks and interaction history for ${patient.name || 'this patient'}?`)) return;
+  saveActivePatientTalks([]);
+  renderPatientTalksUI();
+}
+
+function toggleTalkTranscript(elemId) {
+  const el = document.getElementById(elemId);
+  const btnLbl = document.getElementById('toggle-lbl-' + elemId);
+  if (!el) return;
+  if (el.style.display === 'none' || !el.style.display) {
+    el.style.display = 'block';
+    if (btnLbl) btnLbl.innerText = 'Hide Full Talk';
+  } else {
+    el.style.display = 'none';
+    if (btnLbl) btnLbl.innerText = 'View Full Talk';
+  }
+}
+
+function renderPatientTalksUI() {
+  const list = getActivePatientTalks();
+  const container = document.getElementById('patient-talks-list');
+  const countBadge = document.getElementById('history-count-badge');
+  const activePatient = getActivePatient();
+  const histName = document.getElementById('history-patient-name');
+  if (histName) histName.innerText = activePatient.name || 'Patient';
+
+  if (countBadge) {
+    countBadge.innerText = `${list.length} Talk${list.length === 1 ? '' : 's'}`;
+  }
+  if (!container) return;
+
+  if (list.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding: 26px 16px; background: rgba(15, 23, 42, 0.5); border: 1px dashed rgba(148, 163, 184, 0.25); border-radius: 10px;">
+        <div style="font-size: 28px; margin-bottom: 6px;">💬</div>
+        <div style="font-size: 13.5px; font-weight: 600; color: #cbd5e1;">No previous talks recorded for ${escapeHtml(activePatient.name || 'this patient')}.</div>
+        <div style="font-size: 12px; color: #64748b; margin-top: 4px;">When you start and end an outbound check-in call above, the entire spoken conversation and clinical evaluation will be archived here so you can review it anytime!</div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = list.map((talk, idx) => {
+    const isEscalated = talk.escalation_html || (talk.evaluation && talk.evaluation.flags && talk.evaluation.flags.length > 0);
+    const statusBadge = isEscalated
+      ? `<span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.4);">⚠️ Escalated / Follow-Up Alert</span>`
+      : `<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border-color: rgba(16, 185, 129, 0.4);">✅ Completed & Adherent</span>`;
+
+    const turnsCount = (talk.history || []).length;
+    const previewTurns = (talk.history || []).slice(0, 2).map(t => {
+      const isAgent = t.role === 'assistant';
+      const label = isAgent ? '🤖 Doctor Bot:' : '👤 Patient:';
+      const color = isAgent ? '#93c5fd' : '#cbd5e1';
+      return `<div style="font-size: 12px; color: ${color}; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><strong>${label}</strong> ${escapeHtml(t.content || '')}</div>`;
+    }).join('');
+
+    const fullDialogueHtml = (talk.history || []).map(t => {
+      const isAgent = t.role === 'assistant';
+      const bg = isAgent ? 'rgba(30, 41, 59, 0.85)' : 'rgba(30, 58, 138, 0.45)';
+      const border = isAgent ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(99, 102, 241, 0.4)';
+      const label = isAgent ? '🤖 Hospital Care Agent (Bulbul v3)' : `👤 ${escapeHtml(activePatient.name || 'Patient')}`;
+      const align = isAgent ? 'flex-start' : 'flex-end';
+      const labelColor = isAgent ? '#60a5fa' : '#a5b4fc';
+
+      return `
+        <div style="margin-bottom: 10px; max-width: 90%; align-self: ${align};">
+          <div style="font-size: 11px; font-weight: 700; color: ${labelColor}; margin-bottom: 3px;">${label}</div>
+          <div style="background: ${bg}; border: ${border}; padding: 10px 14px; border-radius: 10px; font-size: 13px; color: #f1f5f9; line-height: 1.5;">
+            ${escapeHtml(t.content || '')}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="card" style="margin-bottom: 14px; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 12px; padding: 14px 18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom: 8px;">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span style="font-size: 15px; font-weight: 700; color: #60a5fa;">📞 Talk #${list.length - idx}: ${escapeHtml(talk.hospital_name || 'Care Follow-up')}</span>
+            <span style="font-size: 12px; color: #94a3b8;">🕒 ${escapeHtml(talk.timestamp || '')}</span>
+            ${statusBadge}
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button class="btn btn-secondary" onclick="toggleTalkTranscript('talk-body-${talk.id}')" style="padding: 4px 10px; font-size: 11px; color:#93c5fd;">
+              <span>👁️</span> <span id="toggle-lbl-talk-body-${talk.id}">View Full Talk (${turnsCount} Turns)</span>
+            </button>
+            <button class="btn btn-secondary" onclick="deleteTalkFromActivePatient('${talk.id}')" style="padding: 4px 8px; font-size: 11px; color:#f87171;" title="Delete this conversation">
+              <span>🗑️</span> <span>Delete</span>
+            </button>
+          </div>
+        </div>
+
+        <div style="font-size: 12.5px; color: #a5b4fc; margin-bottom: 8px;">
+          <strong>Doctor:</strong> ${escapeHtml(talk.doctor_name || 'Attending Physician')} &nbsp;|&nbsp; 
+          <strong>Topic / Diagnosis:</strong> ${escapeHtml(talk.diagnosis || 'General Recovery')}
+        </div>
+
+        <!-- Preview snippet when collapsed -->
+        <div id="talk-preview-${talk.id}" style="background: rgba(15, 23, 42, 0.4); padding: 8px 12px; border-radius: 8px; border-left: 3px solid #3b82f6;">
+          ${previewTurns}
+        </div>
+
+        <!-- Expandable full conversation -->
+        <div id="talk-body-${talk.id}" style="display:none; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(148, 163, 184, 0.15);">
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            ${fullDialogueHtml}
+          </div>
+
+          ${talk.escalation_html ? `<div style="margin-top: 14px;">${talk.escalation_html}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── TAB 1: PREVIOUS DIAGNOSES HISTORY METHODS ──────────────────────────────
+function getActivePatientDiagnoses() {
+  const patient = getActivePatient();
+  return Array.isArray(patient.diagnoses_history) ? patient.diagnoses_history : [];
+}
+
+function saveActivePatientDiagnoses(diags) {
+  const patient = getActivePatient();
+  patient.diagnoses_history = diags;
+  saveActivePatient(patient);
+}
+
+function addDiagnosisToActivePatient(diagRecord) {
+  const diags = getActivePatientDiagnoses();
+  diags.unshift(diagRecord);
+  saveActivePatientDiagnoses(diags);
+  renderPatientDiagnosesUI();
+}
+
+function deleteDiagnosisFromActivePatient(diagId) {
+  if (!confirm("Are you sure you want to delete this consultation check?")) return;
+  let diags = getActivePatientDiagnoses();
+  diags = diags.filter(d => d.id !== diagId);
+  saveActivePatientDiagnoses(diags);
+  renderPatientDiagnosesUI();
+}
+
+function clearAllDiagnosesForActivePatient() {
+  const patient = getActivePatient();
+  const diags = getActivePatientDiagnoses();
+  if (diags.length === 0) {
+    alert("No previous consultations to delete for this patient.");
+    return;
+  }
+  if (!confirm(`Are you sure you want to clear all previous consultations for ${patient.name || 'this patient'}?`)) return;
+  saveActivePatientDiagnoses([]);
+  renderPatientDiagnosesUI();
+}
+
+function renderPatientDiagnosesUI() {
+  const list = getActivePatientDiagnoses();
+  const container = document.getElementById('tab1-history-list');
+  const countBadge = document.getElementById('tab1-history-count-badge');
+  const activePatient = getActivePatient();
+  const t1Name = document.getElementById('tab1-history-patient-name');
+  if (t1Name) t1Name.innerText = activePatient.name || 'Patient';
+
+  if (countBadge) {
+    countBadge.innerText = `${list.length} Check${list.length === 1 ? '' : 's'}`;
+  }
+  if (!container) return;
+
+  if (list.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding: 18px 12px; color: #64748b; font-size: 12.5px;">
+        No previous consultations for ${escapeHtml(activePatient.name || 'this patient')}. Enter symptoms above to get instant clinical triage and safe pain relief.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = list.map((diag, idx) => {
+    const asm = diag.assessment || {};
+    const triageBadge = asm.triage_level === 'EMERGENCY'
+      ? `<span class="badge" style="background:rgba(239,68,68,0.25); color:#fca5a5;">🚨 Emergency</span>`
+      : (asm.triage_level === 'URGENT'
+        ? `<span class="badge" style="background:rgba(245,158,11,0.25); color:#fbbf24;">⚠️ Urgent</span>`
+        : `<span class="badge" style="background:rgba(16,185,129,0.25); color:#34d399;">✅ Routine</span>`);
+
+    return `
+      <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(96, 165, 250, 0.2); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom: 4px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <strong style="font-size: 13px; color: #93c5fd;">Check #${list.length - idx}</strong>
+            <span style="font-size: 11.5px; color: #94a3b8;">🕒 ${escapeHtml(diag.timestamp || '')}</span>
+            ${triageBadge}
+          </div>
+          <button class="btn btn-secondary" onclick="deleteDiagnosisFromActivePatient('${diag.id}')" style="padding: 2px 8px; font-size: 10.5px; color: #f87171;">
+            🗑️ Delete
+          </button>
+        </div>
+        <div style="font-size: 12px; color: #e2e8f0; margin-bottom: 4px;">
+          <strong>Symptoms:</strong> ${escapeHtml(diag.symptoms || '')}
+        </div>
+        <div style="font-size: 11.5px; color: #a5b4fc;">
+          <strong>Possible Condition:</strong> ${escapeHtml(asm.differential_diagnosis ? asm.differential_diagnosis.map(d => d.condition).join(', ') : (asm.patient_summary || 'Analyzed'))}
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function prepareNewPrescriptionUpload() {
@@ -1074,6 +1669,7 @@ function updatePrescriptionUI() {
 
 // Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
+  initPatientsStore();
   const profile = getStoredProfile();
   if (profile.name) document.getElementById('patient-name-input').value = profile.name;
   if (profile.age) document.getElementById('patient-age-input').value = profile.age;
@@ -1081,10 +1677,15 @@ window.addEventListener('DOMContentLoaded', () => {
   if (profile.language) {
     document.getElementById('patient-lang-input').value = profile.language;
   }
+  updatePatientPillsUI();
   updateProfileBadge();
 
   // Load and sync prescriptions (or disable call if none exist)
   updatePrescriptionUI();
+
+  // Render past talks and diagnoses
+  renderPatientTalksUI();
+  renderPatientDiagnosesUI();
 
   // Initialize outbound call autoplay setting
   if (typeof initCallAutoplayToggle === 'function') {
@@ -1101,6 +1702,7 @@ function onProfileInputChanged() {
   const profile = { name, age, gender, language: lang };
   saveStoredProfile(profile);
   updateProfileBadge();
+  updatePatientPillsUI();
 
   // Also update backend session
   if (name && age && gender) {
@@ -1245,6 +1847,19 @@ async function toggleDiagMic() {
           }
           if (data.assessment) {
             renderDiagnosis(data.assessment);
+            addDiagnosisToActivePatient({
+              id: 'diag_' + Date.now(),
+              timestamp: new Date().toLocaleString('en-IN', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+              }),
+              symptoms: data.user_transcript || 'Voice symptoms reported',
+              assessment: data.assessment
+            });
           }
         };
       };
@@ -1297,6 +1912,19 @@ async function runDiagnosis() {
 
     if (data.assessment) {
       renderDiagnosis(data.assessment);
+      addDiagnosisToActivePatient({
+        id: 'diag_' + Date.now(),
+        timestamp: new Date().toLocaleString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        }),
+        symptoms: text,
+        assessment: data.assessment
+      });
     }
   } catch (err) {
     btn.disabled = false;
@@ -2688,6 +3316,28 @@ async function endCall() {
 
   if (data.escalation_html) {
     document.getElementById('escalation-container').innerHTML = data.escalation_html;
+  }
+
+  // Archive this talk into patient's interaction history
+  if (callHistory && callHistory.length > 0) {
+    const talkRecord = {
+      id: 'talk_' + Date.now(),
+      timestamp: new Date().toLocaleString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      }),
+      doctor_name: (tt && tt.doctor_name) ? tt.doctor_name : "Attending Physician",
+      hospital_name: (tt && tt.hospital_name) ? tt.hospital_name : "Hospital Care Team",
+      diagnosis: (tt && tt.diagnosis) ? tt.diagnosis : "Clinical Follow-Up",
+      history: JSON.parse(JSON.stringify(callHistory)),
+      evaluation: data.evaluation || null,
+      escalation_html: data.escalation_html || null
+    };
+    addTalkToActivePatient(talkRecord);
   }
 }
 </script>
