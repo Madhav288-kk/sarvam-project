@@ -38,7 +38,8 @@ Given doctor prescription OCR text or clinical instructions:
    - doctor_name: Name of prescribing doctor with title if mentioned (e.g. 'Dr. A. Sharma, MD'; or null)
    - patient_name: Patient name if mentioned in prescription; otherwise use the provided patient name
    - diagnosis: Clinical condition or reason (e.g. 'Acute viral fever with throat infection')
-   - doctor_notes: Special advice given by doctor
+   - doctor_notes: Special advice given by doctor in the requested language
+   - full_schedule_speech: A complete, warm, fluent spoken narrative of the full day's medication schedule written ENTIRELY in the requested language (e.g. for Marathi: "नमस्कार [नाव]जी, हा तुमचा आजचा संपूर्ण औषधांचा वेळापत्रक आहे. सकाळी नाश्त्यानंतर... दुपारी जेवणानंतर... रात्री झोपण्यापूर्वी... कृपया सर्व औषधे वेळेवर घ्या. धन्यवाद."). Do NOT mix Hindi or English sentences into it; keep the entire speech purely in the patient's language.
 2. Group ALL prescribed medications accurately into daily time slots based on their frequency:
    - "three times a day" -> Morning, Afternoon, Night
    - "twice a day" -> Morning, Night
@@ -58,6 +59,7 @@ Given doctor prescription OCR text or clinical instructions:
      "patient_name": "...",
      "diagnosis": "...",
      "doctor_notes": "...",
+     "full_schedule_speech": "...",
      "medications_list": ["Tab. Paracetamol 500 mg", "Tab. Cetirizine 10 mg", "Syp. Cough linctus", "ORS sachets"],
      "slots": [
        {

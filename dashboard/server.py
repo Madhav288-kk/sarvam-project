@@ -1857,16 +1857,78 @@ async function toggleAllTimetableAudio() {
   const lang = profile.language || 'Hindi';
   const name = tt.patient_name || profile.name || 'Patient';
 
-  // Build spoken text for the full schedule
-  let scheduleSpeech = `नमस्ते ${name} जी। यह आपका दैनिक दवाई का समय चक्र है। `;
-  if (tt.diagnosis) scheduleSpeech += `बीमारी या निदान: ${tt.diagnosis}। `;
-  if (tt.slots && tt.slots.length > 0) {
-    tt.slots.forEach(s => {
-      const medNames = (s.medicines || []).map(m => m.name + ' (' + (m.instructions || '') + ')').join(', ');
-      scheduleSpeech += `${s.name}: ${medNames}। `;
+  // Build spoken text for the full schedule purely in the selected language (no mixed Hindi/English)
+  let scheduleSpeech = "";
+  if (tt.full_schedule_speech && tt.full_schedule_speech.trim()) {
+    scheduleSpeech = tt.full_schedule_speech.trim();
+  } else {
+    // Pure target language narration using individual medicine speech snippets (which are 100% in target language)
+    const speechSnippets = [];
+    (tt.slots || []).forEach(s => {
+      (s.medicines || []).forEach(m => {
+        if (m.speech && m.speech.trim()) {
+          speechSnippets.push(m.speech.trim());
+        } else if (m.name && m.instructions) {
+          speechSnippets.push(`${m.name}, ${m.instructions}`);
+        }
+      });
     });
+
+    const langLower = (lang || 'hindi').toLowerCase();
+    const localizedTemplates = {
+      'marathi': {
+        greeting: `नमस्कार ${name}जी, हा तुमचा आजचा संपूर्ण औषधांचा वेळापत्रक आहे. `,
+        closure: ` कृपया सर्व औषधे वेळेवर घ्या आणि स्वतःची काळजी घ्या. धन्यवाद.`
+      },
+      'hindi': {
+        greeting: `नमस्ते ${name} जी, यह आपका आज का दवाई का शेड्यूल है। `,
+        closure: ` कृपया सभी दवाइयां समय पर लें और अपना ध्यान रखें। धन्यवाद।`
+      },
+      'bengali': {
+        greeting: `নমস্কার ${name}জি, এটি আপনার আজকের ওষুধের সময়সূচী। `,
+        closure: ` দয়া করে সব ওষুধ সময়মতো সেবন করুন। ধন্যবাদ।`
+      },
+      'telugu': {
+        greeting: `నమస్కారం ${name}గారు, ఇది మీ రోజువారీ మందుల సమయ పట్టిక. `,
+        closure: ` దయచేసి మందులన్నీ సమయానికి తీసుకోండి. ధన్యవాదాలు.`
+      },
+      'tamil': {
+        greeting: `வணக்கம் ${name} அவர்களே, இது உங்கள் தினசரி மருந்து அட்டவணை. `,
+        closure: ` தயவுசெய்து அனைத்து மருந்துகளையும் சரியான நேரத்தில் எடுத்துக்கொள்ளுங்கள். நன்றி.`
+      },
+      'gujarati': {
+        greeting: `નમસ્તે ${name}જી, આ તમારું આજનું દવાઓનું ટાઈમટેબલ છે. `,
+        closure: ` કૃપા કરીને બધી દવાઓ સમયસર લો અને કાળજી રાખો. ધન્યવાદ.`
+      },
+      'kannada': {
+        greeting: `ನಮಸ್ಕಾರ ${name}ಅವರೇ, ಇದು ನಿಮ್ಮ ದೈನಂದಿನ ಔಷಧಿಗಳ ವೇಳಾಪಟ್ಟಿ. `,
+        closure: ` ದಯವಿಟ್ಟು ಎಲ್ಲಾ ಔಷಧಿಗಳನ್ನು ಸಮಯಕ್ಕೆ ಸರಿಯಾಗಿ ತೆಗೆದುಕೊಳ್ಳಿ. ಧನ್ಯವಾದಗಳು.`
+      },
+      'malayalam': {
+        greeting: `നമസ്കാരം ${name}, ഇതാണ് നിങ്ങളുടെ ഇന്നത്തെ മരുന്നുകളുടെ സമയക്രമം. `,
+        closure: ` ദയവായി എല്ലാ മരുന്നുകളും കൃത്യസമയത്ത് കഴിക്കുക. നന്ദി.`
+      },
+      'punjabi': {
+        greeting: `ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ ${name}ਜੀ, ਇਹ ਤੁਹਾਡਾ ਅੱਜ ਦਾ ਦਵਾਈਆਂ ਦਾ ਸਮਾਂ-ਸਾਰਣੀ ਹੈ। `,
+        closure: ` ਕਿਰਪਾ ਕਰਕੇ ਸਾਰੀਆਂ ਦਵਾਈਆਂ ਸਮੇਂ ਸਿਰ ਲਓ। ਧੰਨਵਾਦ।`
+      },
+      'odia': {
+        greeting: `ନମସ୍କାର ${name}ଜୀ, ଏହା ଆପଣଙ୍କର ଆଜିର ଔଷଧ ସମୟସୂଚୀ। `,
+        closure: ` ଦୟାକରି ସମସ୍ତ ଔଷଧ ଠିକ୍ ସମୟରେ ନିଅନ୍ତୁ। ଧନ୍ୟବାଦ।`
+      },
+      'english': {
+        greeting: `Hello ${name}, here is your complete medication schedule for today. `,
+        closure: ` Please take all medications on time as directed. Thank you.`
+      }
+    };
+
+    const tpl = localizedTemplates[langLower] || localizedTemplates['hindi'];
+    if (speechSnippets.length > 0) {
+      scheduleSpeech = tpl.greeting + speechSnippets.join(' ') + tpl.closure;
+    } else {
+      scheduleSpeech = tpl.greeting + (tt.doctor_notes || '') + tpl.closure;
+    }
   }
-  if (tt.doctor_notes) scheduleSpeech += `डॉक्टर की सलाह: ${tt.doctor_notes}। कृपया अपनी दवाइयाँ समय पर लें। धन्यवाद।`;
 
   playBtn.disabled = true;
   playBtn.innerHTML = '<span id="all-tt-icon">⏳</span> <span id="all-tt-text">Synthesizing Audio...</span>';
